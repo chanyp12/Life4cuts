@@ -1,411 +1,232 @@
-import json
 import os
+import json
 import base64
-import uuid
-from urllib.parse import urlparse
+from datetime import datetime
+from PIL import Image
 
-from django.templatetags.static import static
-from django.utils import timezone
 from django.shortcuts import render, redirect
-from django.http import JsonResponse, HttpResponseBadRequest
-from django.views.decorators.http import require_POST
-from django.views.decorators.csrf import ensure_csrf_cookie
 from django.conf import settings
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
 
-# utils 폴더에 combine_photo_v2.py가 있다고 가정
-from utils.combine_photo_v2 import combine_with_frame
+# ------------------------------------------------------------------
+# [1] 파일 저장 및 공통 로직
+# ------------------------------------------------------------------
+def save_final_output(image_obj, video_file=None):
+    """최종 합성본 및 동영상을 Output/{날짜} 폴더에 저장"""
+    today_str = datetime.now().strftime("%Y%m%d")
+    base_output_dir = settings.DATA_DIR / 'Output' / today_str
+    
+    img_dir = base_output_dir / 'img'
+    vid_dir = base_output_dir / 'video'
+    os.makedirs(img_dir, exist_ok=True)
+    os.makedirs(vid_dir, exist_ok=True)
 
+    timestamp = datetime.now().strftime("%H%M%S_%f")
+    
+    # 이미지 저장
+    img_filename = f"photo_{timestamp}.jpg"
+    img_save_path = img_dir / img_filename
+    image_obj.save(img_save_path, "JPEG", quality=95)
+    print(f"--> [Saved] Image: {img_save_path}")
 
-# -----------------------
-# Helpers
-# -----------------------
-def _clear_captures_in_session(request):
-    request.session['captured_urls'] = []
-    request.session['captured_videos'] = []
-    request.session.modified = True
+    # 동영상 저장
+    if video_file:
+        vid_filename = f"video_{timestamp}.mp4"
+        vid_save_path = vid_dir / vid_filename
+        with open(vid_save_path, 'wb+') as dest:
+            for chunk in video_file.chunks():
+                dest.write(chunk)
+        print(f"--> [Saved] Video: {vid_save_path}")
 
-def _media_url_to_path(u: str):
-    if not u: return None
-    if u.startswith('file://'): return u[7:] if os.path.exists(u[7:]) else None
-    if u.startswith('http') or u.startswith('/'):
-        u_path = urlparse(u).path
-        if u_path.startswith(settings.MEDIA_URL):
-            rel = u_path[len(settings.MEDIA_URL):]
-            fs_path = os.path.join(settings.MEDIA_ROOT, rel)
-            return fs_path if os.path.exists(fs_path) else None
-    return None
+    return str(img_filename)
 
-def _slots_path(mode: str, theme: str):
-    return settings.FRAMES_DIR / mode / theme / 'slots.json'
+def get_slots_meta(count):
+    """컷 수에 따른 좌표 반환 (600x1800 캔버스 기준)"""
+    # 4컷 (세로)
+    if count == 4:
+        return [
+            {"x": 25, "y": 25,   "w": 550, "h": 400},
+            {"x": 25, "y": 450,  "w": 550, "h": 400},
+            {"x": 25, "y": 875,  "w": 550, "h": 400},
+            {"x": 25, "y": 1300, "w": 550, "h": 400},
+        ]
+    # 3컷 (예시 - 필요시 좌표 수정)
+    elif count == 3:
+        return [
+            {"x": 25, "y": 50,   "w": 550, "h": 500},
+            {"x": 25, "y": 600,  "w": 550, "h": 500},
+            {"x": 25, "y": 1150, "w": 550, "h": 500},
+        ]
+    return []
 
-def _common_stickers_dir():
-    """
-    [수정됨] 스티커는 공용 폴더 사용: /static/frames/stickers
-    settings.FRAMES_DIR = BASE_DIR / 'static' / 'frames' 라고 가정
-    """
-    return settings.FRAMES_DIR / 'stickers'
+# ------------------------------------------------------------------
+# [2] 뷰 함수들
+# ------------------------------------------------------------------
 
-def _load_meta(mode: str, theme: str) -> dict:
-    path = _slots_path(mode, theme)
-    default_meta = {'canvas': {'width': 1000, 'height': 1500}, 'slots': []}
-    if not path.exists():
-        return default_meta
-    try:
-        meta = json.loads(path.read_text(encoding='utf-8'))
-        meta.setdefault('canvas', {'width': 1000, 'height': 1500})
-        meta.setdefault('slots', [])
-        return meta
-    except:
-        return default_meta
+def start_page(request):
+    request.session.flush()
+    # [수정] 배경 이미지 전달 (없으면 검은화면만 나옴)
+    context = {
+        'bg_url': f"{settings.STATIC_URL}background/sample-start.png" 
+    }
+    return render(request, 'start.html', context)
 
-def _save_meta(mode: str, theme: str, meta: dict):
-    path = _slots_path(mode, theme)
-    path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding='utf-8')
-
-def _get_capture_delay(meta: dict) -> int:
-    default = getattr(settings, 'CAPTURE_DELAY_MS', 5000)
-    return int(meta.get('capture_delay_ms', default))
-
-
-# -----------------------
-# Views
-# -----------------------
-def index(request):
-    return redirect('startpage')
-
-@ensure_csrf_cookie
-def startpage(request):
-    base_url = static('background/sample-start.png')
-    return render(request, 'startpage.html', {'bg_url': base_url})
-
-@ensure_csrf_cookie
 def select_shot(request):
     return render(request, 'select_shot.html')
 
-@ensure_csrf_cookie
 def select_theme(request):
-    try: count = int(request.GET.get('count', '3'))
-    except: count = 3
-    if count not in (3, 4): count = 3
+    count = request.GET.get('count', 4)
+    request.session['shot_count'] = int(count)
+    return render(request, 'select_theme.html', {'count': count})
 
-    mode = '3x1' if count == 3 else '4x4'
-    request.session['shot_count'] = count
-    _clear_captures_in_session(request)
-
-    themes = []
-    frame_root = settings.FRAMES_DIR / mode
-    if frame_root.exists():
-        for theme_dir in frame_root.iterdir():
-            if theme_dir.is_dir() and (theme_dir / 'frame.png').exists():
-                themes.append({
-                    'name': theme_dir.name,
-                    'thumb': f"/static/frames/{mode}/{theme_dir.name}/frame.png",
-                    'mode': mode
-                })
-
-    return render(request, 'select_theme.html', {'themes': themes, 'count': count})
-
-@ensure_csrf_cookie
 def camera(request):
-    count = int(request.session.get('shot_count', 3))
-    mode = '3x1' if count == 3 else '4x4'
-    theme = request.GET.get('theme') or request.session.get('theme')
-    
-    if not theme: return redirect('select_theme')
-
+    count = request.session.get('shot_count', 4)
+    theme = request.GET.get('theme', 'basic')
     request.session['theme'] = theme
-    request.session['mode'] = mode
-    _clear_captures_in_session(request)
+    return render(request, 'camera.html', {'count': count, 'theme': theme})
 
-    meta = _load_meta(mode, theme)
-    capture_delay_ms = _get_capture_delay(meta)
-    
-    if meta['slots']:
-        s0 = meta['slots'][0]
-        guide_ratio = s0['w'] / s0['h']
-    else:
-        guide_ratio = 1.5 if count == 3 else 1.33
-
-    return render(request, 'camera.html', {
-        'count': count,
-        'mode': mode,
-        'theme': theme,
-        'guide_ratio': guide_ratio,
-        'capture_delay_ms': capture_delay_ms,
-        'meta_json': json.dumps(meta),
-    })
-
-@require_POST
+@csrf_exempt
 def upload_capture(request):
-    data_url = request.POST.get('data_url')
-    video_file = request.FILES.get('video')
-
-    if not data_url:
-        return JsonResponse({'saved': False, 'reason': 'no_image'}, status=400)
-
-    shot_total = int(request.session.get('shot_count', 4))
-    urls = request.session.get('captured_urls', [])
-    video_urls = request.session.get('captured_videos', [])
-
-    if len(urls) >= shot_total:
-        return JsonResponse({'saved': False, 'reason': 'limit', 'count': len(urls)})
-
-    settings.CAPTURE_DIR.mkdir(parents=True, exist_ok=True)
-
-    try:
-        if ',' in data_url: header, b64data = data_url.split(',', 1)
-        else: b64data = data_url
+    if request.method == 'POST':
+        data_url = request.POST.get('data_url')
+        if not data_url:
+            return JsonResponse({'status': 'fail'}, status=400)
+            
+        format, imgstr = data_url.split(';base64,') 
+        ext = format.split('/')[-1] 
+        data = base64.b64decode(imgstr)
         
-        fname_img = f"{uuid.uuid4().hex}.jpg"
-        path_img = settings.CAPTURE_DIR / fname_img
-        with open(path_img, 'wb') as f: f.write(base64.b64decode(b64data))
+        filename = f"{datetime.now().strftime('%H%M%S_%f')}.{ext}"
+        save_path = settings.CAPTURE_DIR / filename
+        with open(save_path, 'wb') as f:
+            f.write(data)
+            
+        captures = request.session.get('captures', [])
+        captures.append(str(filename))
+        request.session['captures'] = captures
+        request.session.modified = True
         
-        urls.append(f"{settings.MEDIA_URL}captures/{fname_img}")
-    except Exception as e:
-        return JsonResponse({'saved': False}, status=500)
+        return JsonResponse({'status': 'ok', 'count': len(captures)})
+    return JsonResponse({'status': 'fail'}, status=400)
 
-    if video_file:
-        try:
-            fname_vid = f"{uuid.uuid4().hex}.webm"
-            path_vid = settings.CAPTURE_DIR / fname_vid
-            with open(path_vid, 'wb+') as dest:
-                for chunk in video_file.chunks(): dest.write(chunk)
-            video_urls.append(f"{settings.MEDIA_URL}captures/{fname_vid}")
-        except:
-            video_urls.append(None)
-    else:
-        video_urls.append(None)
-
-    request.session['captured_urls'] = urls
-    request.session['captured_videos'] = video_urls
-    request.session.modified = True
-    return JsonResponse({'saved': True, 'count': len(urls)})
-
-@ensure_csrf_cookie
+# ------------------------------------------------------------------
+# [3] Preview (GET): 화면 표시
+# ------------------------------------------------------------------
 def preview(request):
-    mode = request.session.get('mode')
-    theme = request.session.get('theme')
-    if not mode or not theme: return redirect('startpage')
-
-    meta = _load_meta(mode, theme)
-    captured = request.session.get('captured_urls', [])
-
-    return render(request, 'preview.html', {
-        'mode': mode, 'theme': theme,
-        'captured_json': json.dumps(captured),
-        'frame_url': f"/static/frames/{mode}/{theme}/frame.png",
-        'layout_url': f"/static/frames/{mode}/{theme}/layout/layout.png",
-        'meta_json': json.dumps(meta)
-    })
-
-@require_POST
-def prepare_decorate(request):
-    try:
-        body = json.loads(request.body.decode('utf-8'))
-        request.session['mapping_urls'] = body.get('mapping', [])
-        request.session.modified = True
-        return JsonResponse({'ok': True})
-    except:
-        return HttpResponseBadRequest('Error')
-
-@ensure_csrf_cookie
-def decorate(request):
-    mode = request.session.get('mode')
-    theme = request.session.get('theme')
-    mapping_urls = request.session.get('mapping_urls', [])
-    if not mode or not theme: return redirect('startpage')
-
-    meta = _load_meta(mode, theme)
+    captures = request.session.get('captures', [])
+    if not captures:
+        return redirect('start_page')
     
-    images_fs = [_media_url_to_path(u) for u in mapping_urls]
-    
-    rel_dir = 'temp_outputs'
-    out_dir = settings.MEDIA_ROOT / rel_dir
-    out_dir.mkdir(parents=True, exist_ok=True)
-    
-    fname = f"base_{uuid.uuid4().hex[:8]}.jpg"
-    out_path = out_dir / fname
-    
-    frame_png = settings.FRAMES_DIR / mode / theme / 'frame.png'
-    
-    try:
-        combine_with_frame(
-            frame_png=str(frame_png),
-            meta={**meta, 'stickers': []},
-            images=images_fs,
-            out_path=str(out_path),
-            stickers=[], stickers_dir=None
-        )
-    except Exception as e:
-        print(f"Base Compose Error: {e}")
+    count = request.session.get('shot_count', 4)
+    theme = request.session.get('theme', 'basic') # 기본값 basic
 
-    base_url = f"{settings.MEDIA_URL}{rel_dir}/{fname}"
+    # 1. 좌표 및 캔버스 크기 가져오기
+    slots_meta = get_slots_meta(count)
+    canvas_meta = {"width": 600, "height": 1800}
 
-    # [수정] 공용 스티커 폴더 스캔
-    sticker_ids = []
-    sdir = _common_stickers_dir()
-    if sdir.exists():
-        sticker_ids = [p.stem for p in sorted(sdir.glob('*.png'))]
+    # 2. 이미지 URL 리스트
+    captured_urls = [f"{settings.MEDIA_URL}captures/{fname}" for fname in captures]
 
-    return render(request, 'decorate.html', {
-        'mode': mode, 'theme': theme,
-        'base_url': base_url,
-        'canvas_json': json.dumps(meta['canvas']),
-        'sticker_ids_json': json.dumps(sticker_ids)
-    })
+    # 3. 프레임/레이아웃 경로 설정 (동적)
+    # 예: static/frames/4x4/hamzzi/frame.png
+    frame_folder = f"{count}x{count}/{theme}"
+    frame_url = f"{settings.STATIC_URL}frames/{frame_folder}/frame.png"
+    layout_url = f"{settings.STATIC_URL}frames/{frame_folder}/layout.png"
 
-@require_POST
-def finalize(request):
-    try:
-        body = json.loads(request.body.decode('utf-8'))
-        stickers = body.get('stickers', [])
-        
-        request.session['final_stickers'] = stickers
-        
-        mode = request.session.get('mode')
-        theme = request.session.get('theme')
-        mapping = request.session.get('mapping_urls', [])
-        
-        images_fs = [_media_url_to_path(u) for u in mapping]
-        
-        settings.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        fname = f"final_{uuid.uuid4().hex}.jpg"
-        out_path = settings.OUTPUT_DIR / fname
-        
-        frame_png = settings.FRAMES_DIR / mode / theme / 'frame.png'
-        sticker_dir = _common_stickers_dir() # [수정] 공용 폴더
-        meta = _load_meta(mode, theme)
-        
-        combine_with_frame(
-            frame_png=str(frame_png),
-            meta=meta,
-            images=images_fs,
-            out_path=str(out_path),
-            stickers=stickers,
-            stickers_dir=str(sticker_dir)
-        )
-        
-        request.session['last_output_path'] = str(out_path)
-        request.session.modified = True
-        
-        return JsonResponse({'saved': True})
-    except Exception as e:
-        print(e)
-        return JsonResponse({'saved': False}, status=500)
-
-# ==========================================
-# 관리자 모드 View
-# ==========================================
-@ensure_csrf_cookie
-def admin_mode(request):
-    frames_root = settings.FRAMES_DIR
-    mode_themes = {}
-    
-    if frames_root.exists():
-        # 1단계: 모드 폴더(3x1, 4x4) 스캔
-        for mode_dir in frames_root.iterdir():
-            if not mode_dir.is_dir(): continue
-            if mode_dir.name == 'stickers': continue # 스티커 폴더 제외
-            
-            themes = []
-            # 2단계: 테마 폴더 스캔
-            for theme_dir in mode_dir.iterdir():
-                if theme_dir.is_dir() and (theme_dir / 'frame.png').exists():
-                    themes.append(theme_dir.name)
-            
-            if themes:
-                mode_themes[mode_dir.name] = themes
-
-    # 선택 로직
-    mode = request.GET.get('mode')
-    if not mode or mode not in mode_themes:
-        mode = next(iter(mode_themes)) if mode_themes else None
-        
-    theme = request.GET.get('theme')
-    themes = mode_themes.get(mode, [])
-    if not theme or theme not in themes:
-        theme = themes[0] if themes else None
-
-    meta = _load_meta(mode, theme) if (mode and theme) else {'canvas':{'width':0,'height':0},'slots':[]}
-    
-    frame_url = f"/static/frames/{mode}/{theme}/frame.png" if (mode and theme) else ""
-    layout_url = f"/static/frames/{mode}/{theme}/layout/layout.png" if (mode and theme) else ""
-
-    return render(request, 'admin_mode.html', {
-        'mode': mode,
-        'theme': theme,
-        'modes': list(mode_themes.keys()),
-        'themes': themes,
+    context = {
+        'captured_json': json.dumps(captured_urls),
+        'meta_json': json.dumps({'slots': slots_meta, 'canvas': canvas_meta}),
         'frame_url': frame_url,
         'layout_url': layout_url,
-        'meta_json': json.dumps(meta),
-        'capture_delay_ms': _get_capture_delay(meta)
-    })
+    }
+    return render(request, 'preview.html', context)
 
-@require_POST
-def admin_save_slots(request):
-    try:
-        body = json.loads(request.body.decode('utf-8'))
-        mode = body.get('mode')
-        theme = body.get('theme')
-        slots = body.get('slots')
-        delay = body.get('capture_delay_ms')
-        
-        meta = _load_meta(mode, theme)
-        meta['slots'] = slots
-        meta['capture_delay_ms'] = delay
-        _save_meta(mode, theme, meta)
-        
-        return JsonResponse({'saved': True})
-    except Exception as e:
-        return JsonResponse({'saved': False, 'error': str(e)}, status=500)
 
-# ==========================================
-# 인쇄 페이지 View
-# ==========================================
-@ensure_csrf_cookie
-def printing(request):
-    # 1. 최종 이미지 경로 (다운로드용)
-    final_path = request.session.get('last_output_path')
-    final_url = None
-    if final_path:
-        if str(settings.MEDIA_ROOT) in final_path:
-            final_url = settings.MEDIA_URL + os.path.relpath(final_path, settings.MEDIA_ROOT).replace(os.sep, '/')
+# ------------------------------------------------------------------
+# [4] Prepare Decorate (POST): 합성 및 저장
+# ------------------------------------------------------------------
+@csrf_exempt
+def prepare_decorate(request):
+    if request.method == 'POST':
+        try:
+            body = json.loads(request.body)
+            mapping = body.get('mapping', []) 
+            
+            count = request.session.get('shot_count', 4)
+            theme = request.session.get('theme', 'basic')
 
-    # 2. 현재 모드/테마 정보
-    mode = request.session.get('mode')
-    theme = request.session.get('theme')
-    
-    # 3. 메타데이터 및 스티커 로드
-    meta = _load_meta(mode, theme)
-    stickers = request.session.get('final_stickers', [])
-    
-    # 4. 매핑된 데이터 로드 (사진, 비디오)
-    mapping = request.session.get('mapping_urls', [])
-    captures = request.session.get('captured_urls', [])
-    videos = request.session.get('captured_videos', [])
-    
-    # 슬롯 순서대로 비디오 매핑
-    mapped_videos = []
-    for m_url in mapping:
-        if m_url in captures:
-            idx = captures.index(m_url)
-            # 해당 인덱스에 비디오가 존재하면 추가
-            if idx < len(videos) and videos[idx]:
-                mapped_videos.append(videos[idx])
+            # 1. 캔버스 생성 (Preview와 동일 크기)
+            canvas_w, canvas_h = 600, 1800
+            final_image = Image.new('RGB', (canvas_w, canvas_h), (255, 255, 255))
+            
+            # 2. 프레임 로드 (동적 경로)
+            frame_subpath = f"{count}x{count}/{theme}/frame.png"
+            frame_path = settings.FRAMES_DIR / frame_subpath
+            
+            if os.path.exists(frame_path):
+                frame_img = Image.open(frame_path).convert("RGBA")
+                canvas_w, canvas_h = frame_img.size
+                final_image = Image.new('RGB', (canvas_w, canvas_h), (255, 255, 255))
             else:
-                mapped_videos.append(None)
-        else:
-            mapped_videos.append(None)
+                frame_img = None
+                print(f"Warning: Frame not found at {frame_path}")
 
-    # 5. 템플릿으로 데이터 전달
-    return render(request, 'printing.html', {
-        'final_url': final_url,
-        'mode': mode,
-        'theme': theme,
-        'frame_url': f"/static/frames/{mode}/{theme}/frame.png",
-        'layout_url': f"/static/frames/{mode}/{theme}/layout/layout.png", # [추가됨] 레이아웃 이미지
-        'meta_json': json.dumps(meta),
-        'stickers_json': json.dumps(stickers),
-        'mapped_videos_json': json.dumps(mapped_videos)
-    })
+            # 3. 좌표 가져오기
+            slots_meta = get_slots_meta(count)
+
+            # 4. 사진 합성
+            for i, url in enumerate(mapping):
+                if url and i < len(slots_meta):
+                    filename = url.split('/')[-1]
+                    img_path = settings.CAPTURE_DIR / filename
+                    
+                    if os.path.exists(img_path):
+                        photo = Image.open(img_path)
+                        slot = slots_meta[i]
+                        
+                        # 리사이즈
+                        photo = photo.resize((slot['w'], slot['h']))
+                        
+                        # 붙여넣기
+                        final_image.paste(photo, (slot['x'], slot['y']))
+
+            # 5. 프레임 덮기
+            if frame_img:
+                final_image.paste(frame_img, (0, 0), frame_img)
+
+            # 6. 저장 (Output 폴더)
+            save_final_output(final_image, video_file=None)
+
+            # 7. 화면 표시용 임시 저장
+            display_filename = f"merged_{datetime.now().strftime('%H%M%S')}.jpg"
+            final_image.save(settings.OUTPUT_DIR / display_filename)
+            
+            request.session['merged_image_url'] = f"{settings.MEDIA_URL}outputs/{display_filename}"
+
+            return JsonResponse({'ok': True})
+            
+        except Exception as e:
+            print(f"Error in prepare_decorate: {e}")
+            return JsonResponse({'ok': False, 'error': str(e)})
+
+    return JsonResponse({'ok': False})
+
+
+def decorate(request):
+    merged_url = request.session.get('merged_image_url')
+    # decorate.html이 없으면 preview.html 재사용 (결과만 보여줌)
+    # 하지만 님 코드를 보니 preview.html은 선택용이라, 결과 확인용 템플릿을 따로 만들거나
+    # 간단히 렌더링해야 합니다. 여기서는 result_view.html을 가정하거나 
+    # 간단한 결과 페이지를 렌더링합니다.
+    
+    # 임시: 결과 이미지만 보여주는 간단한 페이지
+    return render(request, 'base.html', {'content': f"""
+        <div style="width:100%; height:100%; background:#000; display:flex; justify-content:center; align-items:center; flex-direction:column;">
+            <img src="{merged_url}" style="height:80vh; border:10px solid #fff;">
+            <div style="margin-top:20px;">
+                <button onclick="window.print()" style="padding:15px 30px; border-radius:30px; border:none; background:#00d1b2; color:white; font-size:20px; font-weight:bold;">🖨 인쇄하기</button>
+                <button onclick="location.href='/'" style="padding:15px 30px; border-radius:30px; border:none; background:#ff6b6b; color:white; font-size:20px; font-weight:bold;">🏠 처음으로</button>
+            </div>
+        </div>
+    """})

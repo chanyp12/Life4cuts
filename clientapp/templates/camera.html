@@ -1,7 +1,6 @@
 {% extends 'base.html' %}
 {% block content %}
 <style>
-  /* 전체 화면 레이아웃 (검은 배경, 여백 없음) */
   .camera-page {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
@@ -12,7 +11,6 @@
     overflow: hidden;
   }
 
-  /* 뷰파인더 컨테이너: 화면 꽉 채우기 */
   #viewContainer {
     width: 100vw;
     height: 100vh;
@@ -22,14 +20,13 @@
     position: relative;
   }
   
-  /* 실제 비디오 영역 */
   #view {
     position: relative;
     width: auto;
     height: auto;
     max-width: 100%;
     max-height: 100%;
-    aspect-ratio: {{ guide_ratio|floatformat:5 }};
+    aspect-ratio: {{ guide_ratio|default:0.75 }};
     overflow: hidden;
     box-shadow: 0 0 50px rgba(0,0,0,0.8);
     background: #000;
@@ -39,95 +36,85 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
-    transform: scaleX(-1); /* 거울 모드 */
+    transform: scaleX(-1);
     display: block;
   }
 
-  /* 상단 정보 오버레이 */
   .overlay-info {
     position: absolute;
-    top: 20px;
+    top: 40px;
     left: 0; 
     width: 100%;
     text-align: center;
     z-index: 10;
-    pointer-events: none;
   }
   .overlay-badge {
     background: rgba(0, 0, 0, 0.5);
     color: #fff;
-    padding: 8px 16px;
-    border-radius: 20px;
-    font-size: 15px;
+    padding: 10px 20px;
+    border-radius: 30px;
+    font-size: 20px;
     font-weight: bold;
-    border: 1px solid rgba(255,255,255,0.2);
-    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255,255,255,0.3);
   }
 
-  /* 우측 하단 원형 카운트다운 */
   #countdown-circle {
     position: absolute;
-    bottom: 30px;
-    right: 30px;
-    width: 70px;
-    height: 70px;
+    bottom: 50px;
+    right: 50px;
+    width: 100px;
+    height: 100px;
     border-radius: 50%;
     background: rgba(0, 0, 0, 0.6);
-    border: 4px solid #ffd54f;
+    border: 5px solid #ffd54f;
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 20;
     opacity: 0; 
-    transform: scale(0.8);
-    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    transition: all 0.3s;
   }
   
   #countdown-number {
     color: #fff;
-    font-size: 32px;
+    font-size: 40px;
     font-weight: 800;
-    font-family: sans-serif;
   }
 
   #countdown-circle.active {
     opacity: 1;
-    transform: scale(1);
     animation: pulse 1s infinite;
   }
 
   @keyframes pulse {
-    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 213, 79, 0.7); }
-    70% { transform: scale(1.05); box-shadow: 0 0 0 15px rgba(255, 213, 79, 0); }
-    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 213, 79, 0); }
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
   }
 
-  /* 플래시 효과 */
   #flash {
     position: absolute;
     top: 0; left: 0; right: 0; bottom: 0;
     background: #fff;
     opacity: 0;
     pointer-events: none;
-    z-index: 30;
-    transition: opacity 0.15s ease-out;
+    z-index: 999;
+    transition: opacity 0.1s;
   }
   #flash.active {
     opacity: 1;
     transition: none;
   }
 
-  /* 하단 상태 메시지 */
   #status-msg {
     position: absolute;
-    bottom: 40px;
+    bottom: 60px;
     left: 50%;
     transform: translateX(-50%);
     color: #fff;
-    font-size: 18px;
-    font-weight: 500;
+    font-size: 24px;
+    font-weight: 600;
     text-shadow: 0 2px 8px rgba(0,0,0,0.8);
-    opacity: 0.9;
     z-index: 10;
   }
 </style>
@@ -135,16 +122,14 @@
 <div class="camera-page">
   <div id="viewContainer">
     <div class="overlay-info">
-      <span class="overlay-badge" id="info-badge">{{ count }}컷 모드 / {{ theme }}</span>
+      <span class="overlay-badge" id="info-badge">{{ count }}컷 촬영 중</span>
     </div>
 
     <div id="view">
       <video id="video" autoplay playsinline muted></video>
-      
       <div id="countdown-circle">
         <span id="countdown-number"></span>
       </div>
-
       <div id="flash"></div>
     </div>
 
@@ -156,7 +141,7 @@
 </div>
 
 <script>
-const SLOT_RATIO = {{ guide_ratio|floatformat:5 }}; 
+const SLOT_RATIO = {{ guide_ratio|default:0.75 }}; 
 const SHOT_TOTAL = {{ count }};
 const CAPTURE_DELAY_MS = {{ capture_delay_ms|default:5000 }};
 
@@ -179,15 +164,16 @@ function getCookie(name){
 }
 const CSRF_TOKEN = getCookie('csrftoken');
 
-// ★ [수정] 카메라 초기화 및 에러 핸들링 강화 ★
-async function initCam(){
-  // 1. 브라우저가 카메라 기능을 지원하는지 확인
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    statusMsg.innerHTML = "🚨 <b>카메라 API 차단됨</b><br>보안 문제로 브라우저가 카메라를 막았습니다.<br>run_app.py가 localhost인지 확인하세요.";
-    statusMsg.style.color = "red";
-    return;
-  }
+// [수정] 셔터 소리 재생 함수 (끊김 방지)
+function playShutter() {
+    if (shutterSound) {
+        shutterSound.pause();
+        shutterSound.currentTime = 0; // 항상 처음부터 재생
+        shutterSound.play().catch(e => console.log('Sound error:', e));
+    }
+}
 
+async function initCam(){
   try{
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { width: { ideal: 1920 }, height: { ideal: 1080 }, facingMode: 'user' },
@@ -201,38 +187,20 @@ async function initCam(){
     
   } catch (e){
     console.error(e);
-    // 에러 종류별 메시지 표시
-    let errorText = "카메라 알 수 없는 오류";
-    if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
-        errorText = "🚨 <b>권한 거부됨</b><br>맥 시스템 설정 > 개인정보 보호 > 카메라에서<br>앱 권한을 허용해주세요.";
-    } else if (e.name === 'NotFoundError') {
-        errorText = "🚨 <b>카메라 없음</b><br>연결된 웹캠을 찾을 수 없습니다.";
-    } else {
-        errorText = `🚨 <b>오류 발생:</b> ${e.name}<br>${e.message}`;
-    }
-    statusMsg.innerHTML = errorText;
-    statusMsg.style.color = "#ff6b6b";
+    statusMsg.innerHTML = "🚨 카메라 오류: " + e.message;
   }
 }
 
 function initMediaRecorder(stream) {
-  const mimeTypes = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4'];
+  const mimeTypes = ['video/webm;codecs=vp9', 'video/webm', 'video/mp4'];
   let selectedMimeType = '';
   for (const type of mimeTypes) {
-    if (MediaRecorder.isTypeSupported(type)) {
-      selectedMimeType = type;
-      break;
-    }
+    if (MediaRecorder.isTypeSupported(type)) { selectedMimeType = type; break; }
   }
-  if (!selectedMimeType) return;
-
-  try {
+  if (selectedMimeType) {
     mediaRecorder = new MediaRecorder(stream, { mimeType: selectedMimeType });
-  } catch (e) { console.error(e); }
-
-  mediaRecorder.ondataavailable = (event) => {
-    if (event.data.size > 0) recordedChunks.push(event.data);
-  };
+    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+  }
 }
 
 function startRecording() {
@@ -244,10 +212,7 @@ function startRecording() {
 
 function stopRecording() {
   return new Promise(resolve => {
-    if (!mediaRecorder || mediaRecorder.state === 'inactive') {
-      resolve(null);
-      return;
-    }
+    if (!mediaRecorder || mediaRecorder.state === 'inactive') { resolve(null); return; }
     mediaRecorder.onstop = () => {
       const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType });
       resolve(blob);
@@ -257,7 +222,7 @@ function stopRecording() {
 }
 
 async function waitMsWithCountdown(ms){
-  startRecording();
+  startRecording(); // 영상 녹화 시작
   countdownCircle.classList.add('active');
   
   return new Promise(resolve=>{
@@ -278,13 +243,16 @@ async function waitMsWithCountdown(ms){
 }
 
 async function captureAndUpload(){
-  const videoBlob = await stopRecording();
+  const videoBlob = await stopRecording(); // 녹화 종료 및 영상 파일 획득
   
+  // 플래시 및 소리
   flashEl.classList.add('active');
+  playShutter(); // [수정] 소리 재생
   setTimeout(() => flashEl.classList.remove('active'), 150);
-  try { shutterSound.currentTime=0; shutterSound.play().catch(e=>{}); } catch(e){}
+  
   countdownCircle.classList.remove('active');
 
+  // 캔버스 캡처
   const vw = video.videoWidth;
   const vh = video.videoHeight;
   const videoRatio = vw / vh;
@@ -304,10 +272,9 @@ async function captureAndUpload(){
   
   ctx.translate(cropW, 0);
   ctx.scale(-1, 1);
-  
   ctx.drawImage(video, sx, sy, cropW, cropH, 0, 0, cropW, cropH);
   
-  const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
 
   const formData = new FormData();
   formData.append('data_url', dataUrl);
@@ -316,7 +283,6 @@ async function captureAndUpload(){
   }
 
   statusMsg.textContent = '저장 중...';
-  statusMsg.style.color = '#ffd54f';
   
   try {
     const res = await fetch("{% url 'upload_capture' %}", {
@@ -335,16 +301,16 @@ async function captureAndUpload(){
 
 async function autoSequence(){
   await initCam();
-  await new Promise(r => setTimeout(r, 1500));
+  await new Promise(r => setTimeout(r, 1000));
 
   let taken = 0;
-  infoBadge.textContent = `0 / ${SHOT_TOTAL} | ${ '{{ theme }}' }`;
+  infoBadge.textContent = `0 / ${SHOT_TOTAL} | 촬영 시작`;
 
   while (taken < SHOT_TOTAL){
     const currentShot = taken + 1;
     statusMsg.textContent = `촬영 준비`;
     statusMsg.style.color = '#fff';
-    infoBadge.textContent = `${currentShot} / ${SHOT_TOTAL} | ${ '{{ theme }}' }`;
+    infoBadge.textContent = `${currentShot} / ${SHOT_TOTAL}번째 컷`;
     
     await waitMsWithCountdown(CAPTURE_DELAY_MS);
     
@@ -360,17 +326,15 @@ async function autoSequence(){
     }
 
     if (taken < SHOT_TOTAL) {
-      statusMsg.textContent = '다음 촬영 준비...';
-      statusMsg.style.color = '#ddd';
-      await new Promise(r => setTimeout(r, 1500));
+      statusMsg.textContent = '다음 포즈 준비하세요!';
+      await new Promise(r => setTimeout(r, 2000));
     }
   }
 
-  statusMsg.textContent = '완료! 이동합니다.';
-  statusMsg.style.color = '#00d1b2';
+  statusMsg.textContent = '촬영 끝! 사진을 고르러 갑니다.';
   setTimeout(() => {
-    window.location.href = "{% url 'preview' %}";
-  }, 1000);
+    window.location.href = "{% url 'preview' %}"; // 혹은 select-frame 등 다음 단계로
+  }, 1500);
 }
 
 autoSequence();
