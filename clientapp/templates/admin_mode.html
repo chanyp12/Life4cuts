@@ -1,0 +1,262 @@
+{% extends 'base.html' %}
+{% block content %}
+<style>
+  .admin-page {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    display: flex; flex-direction: column;
+    background-color: #1e1e1e; color: #eee;
+    padding: 16px; box-sizing: border-box;
+  }
+  .admin-header {
+    flex: 0 0 auto; background: #333; padding: 12px 20px;
+    border-radius: 8px; display: flex; gap: 24px; align-items: center;
+    margin-bottom: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+  }
+  .admin-header label { font-size: 14px; font-weight: bold; display: flex; align-items: center; gap: 8px; }
+  .admin-header select, .admin-header input {
+    background: #444; border: 1px solid #555; color: #fff;
+    padding: 4px 8px; border-radius: 4px;
+  }
+  .admin-main { flex: 1; display: flex; gap: 20px; min-height: 0; overflow: hidden; }
+  
+  .admin-left {
+    flex: 1; background: #111; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    position: relative; padding: 20px; overflow: hidden;
+  }
+  #frameWrap {
+    width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+  }
+  #frameInner {
+    position: relative; display: block;
+    box-shadow: 0 0 20px rgba(0,0,0,0.7);
+  }
+
+  /* ★★★ 수정된 레이어 순서 (z-index) ★★★ */
+  /* 1층: 프레임 */
+  #frameImg { 
+    display: block; width: 100%; height: 100%; object-fit: fill; 
+    position: relative; z-index: 1; 
+  }
+  /* 2층: 레이아웃 (프레임 위에 오버레이) */
+  #layoutImg {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    object-fit: fill; pointer-events: none; opacity: 0.8;
+    z-index: 5; /* 프레임보다 높아야 함 */
+  }
+  /* 3층: 슬롯 박스 (가장 위 - 클릭 가능해야 함) */
+  #slotsOverlay {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 10; /* 레이아웃보다 높아야 함 */
+  }
+
+  .slot-box {
+    position: absolute; border: 2px dashed #00d1b2;
+    background-color: rgba(0, 209, 178, 0.15); box-sizing: border-box;
+    pointer-events: auto; /* 클릭 허용 */
+  }
+  .slot-box:hover { border-color: #fff; background-color: rgba(255, 255, 255, 0.2); }
+
+  .admin-right {
+    width: 320px; background: #2a2a2a; border-radius: 12px;
+    display: flex; flex-direction: column; padding: 16px;
+  }
+  .admin-right-scroll { flex: 1; overflow-y: auto; margin-bottom: 16px; }
+  h3 { margin-top: 0; font-size: 16px; border-bottom: 1px solid #444; padding-bottom: 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { padding: 6px; border-bottom: 1px solid #444; text-align: center; }
+  th { color: #aaa; }
+  input[type="number"] {
+    width: 100%; background: #333; border: 1px solid #555; color: #fff;
+    text-align: center; padding: 4px; border-radius: 4px;
+  }
+  .admin-actions { display: flex; flex-direction: column; gap: 8px; }
+  button { padding: 12px; border-radius: 6px; border: none; font-weight: bold; cursor: pointer; }
+  #btn-save { background: #00d1b2; color: #fff; }
+  .secondary { background: #555; color: #ddd; }
+</style>
+
+<div class="admin-page">
+  <div class="admin-header">
+    <label>모드:
+      <select id="sel-mode">
+        {% for m in modes %}
+        <option value="{{ m }}" {% if m == mode %}selected{% endif %}>{{ m }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>테마:
+      <select id="sel-theme">
+        {% for t in themes %}
+        <option value="{{ t }}" {% if t == theme %}selected{% endif %}>{{ t }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>촬영 시간(ms):
+      <input type="number" id="inp-delay" value="{{ capture_delay_ms }}" style="width:80px;">
+    </label>
+  </div>
+
+  <div class="admin-main">
+    <div class="admin-left">
+      <div id="frameWrap">
+        {% if frame_url %}
+        <div id="frameInner">
+          <img id="frameImg" src="{{ frame_url }}" alt="frame" onerror="alert('프레임 이미지 로드 실패: {{ frame_url }}')">
+          
+          {% if layout_url %}
+          <img id="layoutImg" src="{{ layout_url }}" alt="layout" onerror="console.log('레이아웃 없음')">
+          {% endif %}
+          
+          <div id="slotsOverlay"></div>
+        </div>
+        {% else %}
+        <div style="color:#aaa; text-align:center;">
+            <p>프레임 정보가 없습니다.</p>
+            <p style="font-size:12px; color:#666;">static/frames 폴더를 확인하세요.</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="admin-right">
+      <div class="admin-right-scroll">
+        <h3>슬롯 좌표 (원본 기준)</h3>
+        <div id="slotsTable"></div>
+      </div>
+      <div class="admin-actions">
+        <button id="btn-save">저장</button>
+        <button type="button" class="secondary" onclick="location.href='{% url 'startpage' %}'">나가기</button>
+        <div id="save-status" style="text-align:center; font-size:12px; margin-top:4px; height:16px;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const meta = {{ meta_json|safe }};
+const mode = "{{ mode|default:'' }}";
+const theme = "{{ theme|default:'' }}";
+
+const frameImg = document.getElementById('frameImg');
+const frameInner = document.getElementById('frameInner');
+const slotsOverlay = document.getElementById('slotsOverlay');
+const slotsTable = document.getElementById('slotsTable');
+const frameWrap = document.getElementById('frameWrap');
+
+function updateOverlays() {
+  if (!frameImg || !frameInner || !slotsOverlay || !frameWrap) return;
+  
+  const natW = frameImg.naturalWidth;
+  const natH = frameImg.naturalHeight;
+  if (!natW || !natH) return;
+
+  const wrapRect = frameWrap.getBoundingClientRect();
+  const scale = Math.min(wrapRect.width / natW, wrapRect.height / natH);
+  const finalW = natW * scale;
+  const finalH = natH * scale;
+
+  frameInner.style.width = finalW + 'px';
+  frameInner.style.height = finalH + 'px';
+  
+  const canvasW = (meta.canvas && meta.canvas.width) ? meta.canvas.width : natW;
+  const canvasH = (meta.canvas && meta.canvas.height) ? meta.canvas.height : natH;
+  const scaleX = finalW / canvasW;
+  const scaleY = finalH / canvasH;
+
+  slotsOverlay.innerHTML = '';
+  (meta.slots || []).forEach((s, idx) => {
+    const div = document.createElement('div');
+    div.className = 'slot-box';
+    div.style.left = (s.x * scaleX) + 'px';
+    div.style.top = (s.y * scaleY) + 'px';
+    div.style.width = (s.w * scaleX) + 'px';
+    div.style.height = (s.h * scaleY) + 'px';
+    div.title = `Slot #${idx+1}`;
+    slotsOverlay.appendChild(div);
+  });
+}
+
+function renderSlotsTable() {
+  if (!meta.slots) {
+    slotsTable.innerHTML = '<p style="color:#777;">데이터 없음</p>';
+    return;
+  }
+  let html = '<table><tr><th>#</th><th>X</th><th>Y</th><th>W</th><th>H</th></tr>';
+  meta.slots.forEach((s, idx) => {
+    html += `
+      <tr data-idx="${idx}">
+        <td>${idx+1}</td>
+        <td><input type="number" name="x" value="${s.x}"></td>
+        <td><input type="number" name="y" value="${s.y}"></td>
+        <td><input type="number" name="w" value="${s.w}"></td>
+        <td><input type="number" name="h" value="${s.h}"></td>
+      </tr>
+    `;
+  });
+  html += '</table>';
+  slotsTable.innerHTML = html;
+
+  slotsTable.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const tr = inp.closest('tr');
+      const idx = parseInt(tr.dataset.idx, 10);
+      const name = inp.name;
+      meta.slots[idx][name] = parseInt(inp.value || '0', 10);
+      updateOverlays();
+    });
+  });
+}
+
+window.addEventListener('resize', updateOverlays);
+
+const selMode = document.getElementById('sel-mode');
+const selTheme = document.getElementById('sel-theme');
+if(selMode && selTheme){
+  const reload = () => {
+    window.location.href = `/admin-mode?mode=${selMode.value}&theme=${selTheme.value}`;
+  };
+  selMode.addEventListener('change', reload);
+  selTheme.addEventListener('change', reload);
+}
+
+function getCookie(name){
+  let value = `; ${document.cookie}`;
+  let parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return decodeURIComponent(parts.pop().split(';').shift());
+}
+
+document.getElementById('btn-save').addEventListener('click', async () => {
+  const statusEl = document.getElementById('save-status');
+  statusEl.textContent = '저장 중...';
+  statusEl.style.color = '#ffd54f';
+  const delayVal = document.getElementById('inp-delay').value;
+  
+  try {
+    const res = await fetch("{% url 'admin_save_slots' %}", {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+      body: JSON.stringify({
+        mode, theme, capture_delay_ms: parseInt(delayVal || '5000', 10), slots: meta.slots
+      })
+    });
+    const js = await res.json();
+    if (res.ok && js.saved) {
+      statusEl.textContent = '저장 완료!'; statusEl.style.color = '#00d1b2';
+      setTimeout(() => statusEl.textContent = '', 2000);
+    } else {
+      statusEl.textContent = '실패'; statusEl.style.color = '#ff6b6b';
+    }
+  } catch(e) {
+    statusEl.textContent = '오류'; statusEl.style.color = '#ff6b6b';
+  }
+});
+
+if (frameImg) {
+    if(frameImg.complete && frameImg.naturalWidth > 0) { renderSlotsTable(); updateOverlays(); }
+    else { frameImg.onload = () => { renderSlotsTable(); updateOverlays(); }; }
+}
+</script>
+{% endblock %}

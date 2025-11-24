@@ -1,0 +1,227 @@
+{% extends 'base.html' %}
+{% block content %}
+<style>
+  .decor-page{ width:100%; height:100%; display:flex; flex-direction:column; padding:16px; box-sizing:border-box; background-color: #1a1a1a; }
+  .decor-main{ flex:1; display:flex; gap:20px; min-height:0; overflow: hidden; }
+  .decor-left{ flex:1; display:flex; align-items:center; justify-content:center; min-width:0; background: #000; border-radius: 12px; padding: 20px; position: relative; }
+  #baseWrap { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; position: relative; }
+  #baseInner { position: relative; display: block; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+  #baseImg { display: block; width: 100%; height: 100%; object-fit: fill; }
+  #stickersOverlay { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+  .sticker-wrap{ position:absolute; pointer-events:auto; transform-origin:center center; touch-action: none; }
+  .sticker-instance{ width:100%; height:100%; cursor:move; pointer-events:auto; display: block; }
+  .sticker-wrap.selected{ outline:2px solid #ffd54f; z-index: 100; }
+  .handle-resize, .handle-rotate{ position:absolute; width:14px; height:14px; border-radius:50%; background:#fff; border:2px solid #00d1b2; box-sizing:border-box; z-index: 101; display: none; }
+  .sticker-wrap.selected .handle-resize, .sticker-wrap.selected .handle-rotate { display: block; }
+  .handle-resize{ right:-8px; bottom:-8px; cursor:nwse-resize; }
+  .handle-rotate{ left:50%; top:-20px; transform:translateX(-50%); cursor:grab; }
+  .decor-right{ width:260px; min-width:220px; display:flex; flex-direction:column; background: #222; border-radius: 12px; padding: 16px; }
+  .sticker-palette{ flex:1; overflow-y:auto; }
+  .sticker-palette-title{ font-size:14px; margin-bottom:10px; font-weight: bold; color: #fff; }
+  .sticker-list{ display:flex; flex-wrap:wrap; gap:8px; }
+  .sticker-thumb{ width:48px; height:48px; cursor:pointer; border-radius:8px; background:#333; padding:4px; box-sizing:border-box; border: 1px solid #444; }
+  .sticker-thumb img{ width:100%; height:100%; object-fit:contain; }
+  .decor-actions{ margin-top:16px; display:flex; flex-direction:column; gap:10px; border-top: 1px solid #444; padding-top: 16px; }
+  .decor-actions-top{ display:flex; gap:10px; }
+  .decor-actions-top button { flex: 1; }
+  button { padding: 10px; border-radius: 6px; border: none; cursor: pointer; font-weight: bold; background: #00d1b2; color: white; }
+  button.secondary { background: #555; }
+  button#btnDeleteSticker { background: #ff6b6b; font-size: 12px; padding: 8px;}
+</style>
+
+<div class="decor-page">
+  <div style="margin-bottom:10px;">
+    <h1 style="margin:0; font-size:24px; color:white;">꾸미기</h1>
+    <p style="margin:4px 0 0; font-size:13px; color:#aaa;">프레임과 사진 위에 스티커를 올려 꾸며보세요.</p>
+  </div>
+  <div class="decor-main">
+    <div class="decor-left">
+      <div id="baseWrap">
+        <div id="baseInner">
+          <img id="baseImg" src="{{ base_url }}" alt="이미지 로드 실패">
+          <div id="stickersOverlay"></div>
+        </div>
+      </div>
+    </div>
+    <div class="decor-right">
+      <div class="sticker-palette">
+        <div class="sticker-palette-title">스티커 목록</div>
+        <div id="stickerPalette" class="sticker-list"></div>
+      </div>
+      <div class="decor-actions">
+        <div style="font-size:12px; color:#aaa; margin-bottom:4px;">
+          선택: <span id="stickerLabel" style="color:#ffd54f;">(없음)</span>
+        </div>
+        <button type="button" id="btnDeleteSticker">스티커 삭제</button>
+        <div class="decor-actions-top">
+          <button type="button" class="secondary" onclick="location.href='{% url 'startpage' %}'">처음으로</button>
+          <button type="button" id="btnPrint">인쇄하기</button>
+        </div>
+        <span id="status" style="font-size:12px; color:#ffd54f; text-align:center; min-height:16px;"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const canvasInfo = {{ canvas_json|safe }};
+const stickerIds = {{ sticker_ids_json|safe }};
+const mode = "{{ mode|default:'' }}";
+const theme = "{{ theme|default:'' }}";
+
+const baseImg = document.getElementById('baseImg');
+const baseInner = document.getElementById('baseInner');
+const baseWrap = document.getElementById('baseWrap');
+const stickersOverlay = document.getElementById('stickersOverlay');
+const stickerPalette = document.getElementById('stickerPalette');
+const stickerLabel = document.getElementById('stickerLabel');
+const btnDeleteSticker = document.getElementById('btnDeleteSticker');
+const statusEl = document.getElementById('status');
+const btnPrint = document.getElementById('btnPrint');
+
+let scaleX = 1, scaleY = 1; 
+let stickers = []; 
+let selectedStickerIdx = null;
+let currentMode = null; 
+let startX = 0, startY = 0;
+let initialParam = {}; 
+
+// ★ 공용 폴더 경로 설정 ★
+function getStickerPath(id) {
+    return `/static/frames/stickers/${id}.png`;
+}
+
+function layoutOverlay(){
+  if (!baseImg || !baseWrap || !baseInner) return;
+  const natW = baseImg.naturalWidth; const natH = baseImg.naturalHeight;
+  if (!natW || !natH) return;
+  const wrapRect = baseWrap.getBoundingClientRect();
+  const scale = Math.min(wrapRect.width / natW, wrapRect.height / natH);
+  const finalW = natW * scale; const finalH = natH * scale;
+
+  baseInner.style.width = finalW + 'px';
+  baseInner.style.height = finalH + 'px';
+
+  const cvsW = (canvasInfo && canvasInfo.width) ? canvasInfo.width : natW;
+  const cvsH = (canvasInfo && canvasInfo.height) ? canvasInfo.height : natH;
+  scaleX = finalW / cvsW; scaleY = finalH / cvsH;
+  renderStickers();
+}
+
+function renderStickers(){
+  stickersOverlay.innerHTML = '';
+  stickers.forEach((st, idx)=>{
+    const wrap = document.createElement('div');
+    wrap.className = 'sticker-wrap'; wrap.dataset.idx = idx;
+    wrap.style.left = (st.x * scaleX) + 'px'; wrap.style.top = (st.y * scaleY) + 'px';
+    wrap.style.width = (st.w * scaleX) + 'px'; wrap.style.height = (st.h * scaleX) + 'px';
+    wrap.style.transform = `rotate(${st.angle || 0}deg)`;
+
+    const img = document.createElement('img');
+    img.className = 'sticker-instance';
+    img.src = getStickerPath(st.id); // 경로 적용
+    img.draggable = false;
+
+    const hResize = document.createElement('div'); hResize.className = 'handle-resize';
+    const hRotate = document.createElement('div'); hRotate.className = 'handle-rotate';
+    wrap.appendChild(img); wrap.appendChild(hResize); wrap.appendChild(hRotate);
+    if (idx === selectedStickerIdx) wrap.classList.add('selected');
+    stickersOverlay.appendChild(wrap);
+  });
+  refreshLabel();
+}
+
+function refreshLabel(){
+  if(selectedStickerIdx === null) stickerLabel.textContent = "(없음)";
+  else stickerLabel.textContent = `${stickers[selectedStickerIdx].id} (#${selectedStickerIdx+1})`;
+}
+
+function renderPalette(){
+  stickerPalette.innerHTML = '';
+  stickerIds.forEach(id=>{
+    const div = document.createElement('div');
+    div.className = 'sticker-thumb';
+    div.innerHTML = `<img src="${getStickerPath(id)}">`; // 경로 적용
+    div.onclick = () => addSticker(id);
+    stickerPalette.appendChild(div);
+  });
+}
+
+function addSticker(id){
+  const baseSize = (canvasInfo.width || 1000) * 0.2;
+  stickers.push({
+    id: id, x: (canvasInfo.width - baseSize)/2, y: (canvasInfo.height - baseSize)/2,
+    w: baseSize, h: baseSize, angle: 0
+  });
+  selectedStickerIdx = stickers.length - 1;
+  renderStickers();
+}
+
+stickersOverlay.addEventListener('mousedown', e => {
+  const wrap = e.target.closest('.sticker-wrap');
+  if(!wrap) { if(e.target === stickersOverlay) { selectedStickerIdx = null; renderStickers(); } return; }
+  const idx = parseInt(wrap.dataset.idx, 10);
+  selectedStickerIdx = idx; renderStickers(); 
+  const st = stickers[idx]; startX = e.clientX; startY = e.clientY;
+  const newWrap = stickersOverlay.querySelector(`.sticker-wrap[data-idx="${idx}"]`);
+  
+  if(e.target.classList.contains('handle-resize')){
+    currentMode = 'resize'; initialParam = { w: st.w, h: st.h };
+  } else if(e.target.classList.contains('handle-rotate')){
+    currentMode = 'rotate';
+    const rect = newWrap.getBoundingClientRect();
+    const cx = rect.left + rect.width/2; const cy = rect.top + rect.height/2;
+    const startRad = Math.atan2(e.clientY - cy, e.clientX - cx);
+    initialParam = { cx, cy, startRad, baseAngle: st.angle || 0 };
+  } else {
+    currentMode = 'move'; initialParam = { x: st.x, y: st.y };
+  }
+  e.preventDefault();
+});
+
+window.addEventListener('mousemove', e => {
+  if(!currentMode || selectedStickerIdx === null) return;
+  e.preventDefault();
+  const st = stickers[selectedStickerIdx];
+  const dx = e.clientX - startX; const dy = e.clientY - startY;
+  if(currentMode === 'move'){
+    st.x = initialParam.x + (dx / scaleX); st.y = initialParam.y + (dy / scaleY);
+  } else if(currentMode === 'resize'){
+    const change = dx / scaleX; const newSize = Math.max(50, initialParam.w + change); st.w = newSize; st.h = newSize;
+  } else if(currentMode === 'rotate'){
+    const currentRad = Math.atan2(e.clientY - initialParam.cy, e.clientX - initialParam.cx);
+    const deltaDeg = (currentRad - initialParam.startRad) * 180 / Math.PI;
+    st.angle = initialParam.baseAngle + deltaDeg;
+  }
+  renderStickers();
+});
+window.addEventListener('mouseup', () => { currentMode = null; });
+
+btnDeleteSticker.addEventListener('click', ()=>{
+  if(selectedStickerIdx !== null){ stickers.splice(selectedStickerIdx, 1); selectedStickerIdx = null; renderStickers(); }
+});
+if (baseImg.complete && baseImg.naturalWidth > 0) layoutOverlay();
+else baseImg.onload = layoutOverlay;
+window.addEventListener('resize', layoutOverlay);
+renderPalette();
+
+function getCookie(name){
+  let value = `; ${document.cookie}`;
+  let parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return decodeURIComponent(parts.pop().split(';').shift());
+}
+btnPrint.addEventListener('click', async ()=>{
+  statusEl.textContent = "이미지 생성 중...";
+  try {
+    const res = await fetch("{% url 'finalize' %}", {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+      body: JSON.stringify({ stickers })
+    });
+    const js = await res.json();
+    if(res.ok && js.saved){ window.location.href = "{% url 'printing' %}"; } 
+    else { statusEl.textContent = "오류: " + (js.error || 'Unknown'); }
+  } catch(e){ statusEl.textContent = "네트워크 오류"; }
+});
+</script>
+{% endblock %}
