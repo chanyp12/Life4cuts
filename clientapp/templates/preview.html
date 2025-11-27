@@ -1,69 +1,345 @@
 {% extends 'base.html' %}
 {% block content %}
 <style>
-    /* 전체 레이아웃 */
-    .preview-page {
-        width: 100vw;
-        height: 100vh;
-        background-color: #222;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        color: white;
-    }
+  /* [수정] 전체 화면 스크롤 방지 (양옆 스크롤 제거) */
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden; /* 브라우저 자체 스크롤바 숨김 */
+    background-color: #1a1a1a;
+  }
 
-    /* [수정] 결과 이미지 컨테이너: 흰색 배경 강제 */
-    #result-container {
-        position: relative;
-        background-color: #ffffff !important; /* 투명 배경 방지 */
-        padding: 10px; /* 액자 느낌 테두리 */
-        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-        z-index: 10;
-        max-height: 80vh;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-    }
+  .preview-page {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    box-sizing: border-box;
+    background-color: #1a1a1a;
+    overflow: hidden; /* 내부 요소 튀어나감 방지 */
+  }
 
-    #final-image {
-        display: block;
-        max-height: 75vh;
-        width: auto;
-        object-fit: contain;
-    }
+  .preview-header {
+    flex: 0 0 auto;
+    margin-bottom: 15px;
+  }
+  .preview-header h1 { margin: 0 0 5px 0; font-size: 24px; color: #fff; }
+  .preview-header p { margin: 0; font-size: 14px; color: #aaa; }
 
-    .btn-group {
-        margin-top: 30px;
-        display: flex;
-        gap: 20px;
-        z-index: 20;
-    }
+  .preview-main {
+    flex: 1;
+    display: flex;
+    gap: 20px;
+    min-height: 0; /* Flex 자식의 overflow 처리를 위해 필수 */
+    overflow: hidden;
+  }
 
-    .btn {
-        padding: 15px 40px;
-        font-size: 20px;
-        font-weight: bold;
-        border: none;
-        border-radius: 50px;
-        cursor: pointer;
-        transition: transform 0.2s;
-    }
-    .btn-print { background-color: #00d1b2; color: white; }
-    .btn-home { background-color: #ff6b6b; color: white; }
-    .btn:active { transform: scale(0.95); }
+  .thumbs {
+    flex: 0 0 260px;
+    overflow-y: auto; /* 썸네일 목록만 세로 스크롤 허용 */
+    padding-right: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  /* 썸네일 스크롤바 디자인 (선택 사항) */
+  .thumbs::-webkit-scrollbar { width: 6px; }
+  .thumbs::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+  .thumbs::-webkit-scrollbar-track { background: transparent; }
+
+  .thumb {
+    width: 100%;
+    background: #000;
+    border-radius: 8px;
+    border: 2px solid #333;
+    cursor: pointer;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .thumb img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .thumb.selected { border-color: #ffd54f; }
+
+  .frame-area {
+    flex: 1;
+    background: #000;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    padding: 20px;
+    overflow: hidden; /* 이미지가 영역 밖으로 나가는 것 방지 */
+  }
+
+  #frameWrap {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+
+  #frameInner {
+    position: relative;
+    display: block; 
+    box-shadow: 0 0 30px rgba(0,0,0,0.5);
+    margin: 0 auto;
+  }
+
+  #frameImg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: fill;
+  }
+
+  #slotsOverlay {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 10;
+  }
+
+  #layoutImg {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    object-fit: fill;
+    z-index: 20;
+    pointer-events: none;
+    opacity: 1.0;
+  }
+
+  .slot-box {
+    position: absolute;
+    border: 1px dashed rgba(255, 255, 255, 0.5);
+    background-color: rgba(0, 209, 178, 0.1);
+    cursor: pointer;
+    background-size: cover;
+    background-position: center;
+    box-sizing: border-box;
+    transition: border 0.2s;
+    z-index: 10;
+  }
+  .slot-box:hover {
+    background-color: rgba(0, 209, 178, 0.3);
+    border-color: #fff;
+  }
+  .slot-box.selected {
+    border: 3px solid #ffd54f;
+    z-index: 15;
+  }
+
+  .preview-footer {
+    flex: 0 0 auto;
+    margin-top: 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  button {
+    padding: 10px 20px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    font-weight: bold;
+    background: #00d1b2;
+    color: white;
+    font-size: 14px;
+  }
+  button.secondary { background: #555; }
 </style>
 
 <div class="preview-page">
-    <h1>완성된 사진</h1>
-    
-    <div id="result-container">
-        <img id="final-image" src="{{ final_image_url }}" alt="인생네컷 결과">
-    </div>
+  <div class="preview-header">
+    <h1>사진 선택</h1>
+    <p>슬롯을 클릭하고 왼쪽 목록에서 사진을 선택하세요.</p>
+  </div>
 
-    <div class="btn-group">
-        <button class="btn btn-home" onclick="location.href='/'">처음으로</button>
-        <button class="btn btn-print" onclick="window.print()">🖨 인쇄하기</button>
+  <div class="preview-main">
+    <div class="thumbs" id="thumbs"></div>
+
+    <div class="frame-area">
+      <div id="frameWrap">
+        <div id="frameInner">
+          <img id="frameImg" src="{{ frame_url }}" alt="frame">
+          
+          <div id="slotsOverlay"></div>
+          
+          {% if layout_url %}
+            <img id="layoutImg" src="{{ layout_url }}" alt="layout">
+          {% endif %}
+        </div>
+      </div>
     </div>
+  </div>
+
+  <div class="preview-footer">
+    <button type="button" id="btnClearSlot" class="secondary">선택 취소</button>
+    <div style="display:flex; align-items:center; gap:15px;">
+      <span id="status" style="font-size:14px; color:#ffd54f;"></span>
+      <button type="button" id="btnDone">꾸미기 이동</button>
+    </div>
+  </div>
 </div>
+
+<script>
+const captured = {{ captured_json|safe }};
+const meta = {{ meta_json|safe }};
+
+const frameImg = document.getElementById('frameImg');
+const frameInner = document.getElementById('frameInner');
+const slotsOverlay = document.getElementById('slotsOverlay');
+const thumbsEl = document.getElementById('thumbs');
+const frameWrap = document.getElementById('frameWrap');
+
+const slots = meta.slots || [];
+const canvas = meta.canvas || {width:1, height:1};
+
+let mapping = new Array(slots.length).fill(null);
+window.mapping = mapping;
+let currentSlot = 0;
+
+function renderThumbs(){
+  thumbsEl.innerHTML = '';
+  captured.forEach((url, idx)=>{
+    const div = document.createElement('div');
+    div.className = 'thumb';
+    div.innerHTML = `<img src="${url}" loading="lazy">`;
+    
+    div.addEventListener('click', ()=>{
+      if (currentSlot === null && slots.length > 0) currentSlot = 0;
+      if (currentSlot !== null) {
+        mapping[currentSlot] = url;
+        renderSlots();
+      }
+    });
+    thumbsEl.appendChild(div);
+  });
+}
+
+function renderSlots(){
+  slotsOverlay.innerHTML = '';
+  if (!frameImg || !frameInner || !frameWrap) return;
+
+  const natW = frameImg.naturalWidth;
+  const natH = frameImg.naturalHeight;
+  if (!natW || !natH) return;
+
+  const wrapRect = frameWrap.getBoundingClientRect();
+  const wrapW = wrapRect.width;
+  const wrapH = wrapRect.height;
+  if (!wrapW || !wrapH) return;
+
+  const scale = Math.min(wrapW / natW, wrapH / natH);
+  const finalW = natW * scale;
+  const finalH = natH * scale;
+
+  frameInner.style.width = finalW + 'px';
+  frameInner.style.height = finalH + 'px';
+
+  const baseW = (canvas && canvas.width) ? canvas.width : natW;
+  const baseH = (canvas && canvas.height) ? canvas.height : natH;
+
+  const scaleX = finalW / baseW;
+  const scaleY = finalH / baseH;
+
+  slots.forEach((s, idx)=>{
+    const div = document.createElement('div');
+    div.className = 'slot-box';
+    
+    div.style.left   = (s.x * scaleX) + 'px';
+    div.style.top    = (s.y * scaleY) + 'px';
+    div.style.width  = (s.w * scaleX) + 'px';
+    div.style.height = (s.h * scaleY) + 'px';
+
+    if (mapping[idx]){
+      div.style.backgroundImage = `url(${mapping[idx]})`;
+    } else {
+      div.style.backgroundImage = 'none';
+    }
+
+    if (idx === currentSlot){
+      div.classList.add('selected');
+    }
+
+    div.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      currentSlot = idx;
+      renderSlots();
+    });
+
+    slotsOverlay.appendChild(div);
+  });
+}
+
+if (frameImg.complete && frameImg.naturalHeight !== 0) {
+  renderThumbs();
+  renderSlots();
+} else {
+  frameImg.onload = () => {
+    renderThumbs();
+    renderSlots();
+  };
+}
+
+window.addEventListener('resize', renderSlots);
+
+document.getElementById('btnClearSlot').addEventListener('click', ()=>{
+  if (currentSlot !== null) {
+    mapping[currentSlot] = null;
+    renderSlots();
+  }
+});
+
+function getCookie(name){
+  let cookieValue = null;
+  if (document.cookie && document.cookie !== '') {
+    const cookies = document.cookie.split(';');
+    for(let i=0; i<cookies.length; i++){
+      const cookie = cookies[i].trim();
+      if(cookie.substring(0, name.length+1) === (name + '=')){
+        cookieValue = decodeURIComponent(cookie.substring(name.length+1));
+        break;
+      }
+    }
+  }
+  return cookieValue;
+}
+
+document.getElementById('btnDone').addEventListener('click', async ()=>{
+  const statusEl = document.getElementById('status');
+  statusEl.textContent = '저장 중...';
+  
+  try {
+    const res = await fetch("{% url 'prepare_decorate' %}", {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCookie('csrftoken')
+      },
+      body: JSON.stringify({ mapping })
+    });
+    const js = await res.json();
+    if (res.ok && js.ok) {
+      window.location.href = "{% url 'decorate' %}";
+    } else {
+      statusEl.textContent = '오류: ' + (js.error || 'Unknown');
+    }
+  } catch(e) {
+    console.error(e);
+    statusEl.textContent = '네트워크 오류';
+  }
+});
+</script>
 {% endblock %}

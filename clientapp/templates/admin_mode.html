@@ -1,11 +1,20 @@
 {% extends 'base.html' %}
 {% block content %}
 <style>
+  /* [수정] 스크롤 방지 및 배경색 통일 */
+  html, body {
+    margin: 0; padding: 0;
+    width: 100%; height: 100%;
+    overflow: hidden; /* 스크롤바 숨김 */
+    background-color: #1e1e1e;
+  }
+
   .admin-page {
-    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
     display: flex; flex-direction: column;
     background-color: #1e1e1e; color: #eee;
     padding: 16px; box-sizing: border-box;
+    overflow: hidden; /* 내부 스크롤 방지 */
   }
   .admin-header {
     flex: 0 0 auto; background: #333; padding: 12px 20px;
@@ -34,28 +43,25 @@
     box-shadow: 0 0 20px rgba(0,0,0,0.7);
   }
 
-  /* ★★★ 수정된 레이어 순서 (z-index) ★★★ */
-  /* 1층: 프레임 */
+  /* 레이어 순서 정리 */
   #frameImg { 
     display: block; width: 100%; height: 100%; object-fit: fill; 
     position: relative; z-index: 1; 
   }
-  /* 2층: 레이아웃 (프레임 위에 오버레이) */
   #layoutImg {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%;
     object-fit: fill; pointer-events: none; opacity: 0.8;
-    z-index: 5; /* 프레임보다 높아야 함 */
+    z-index: 5; 
   }
-  /* 3층: 슬롯 박스 (가장 위 - 클릭 가능해야 함) */
   #slotsOverlay {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    pointer-events: none; z-index: 10; /* 레이아웃보다 높아야 함 */
+    pointer-events: none; z-index: 10; 
   }
 
   .slot-box {
     position: absolute; border: 2px dashed #00d1b2;
     background-color: rgba(0, 209, 178, 0.15); box-sizing: border-box;
-    pointer-events: auto; /* 클릭 허용 */
+    pointer-events: auto; 
   }
   .slot-box:hover { border-color: #fff; background-color: rgba(255, 255, 255, 0.2); }
 
@@ -64,6 +70,10 @@
     display: flex; flex-direction: column; padding: 16px;
   }
   .admin-right-scroll { flex: 1; overflow-y: auto; margin-bottom: 16px; }
+  /* 스크롤바 디자인 (선택사항) */
+  .admin-right-scroll::-webkit-scrollbar { width: 8px; }
+  .admin-right-scroll::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
+
   h3 { margin-top: 0; font-size: 16px; border-bottom: 1px solid #444; padding-bottom: 8px; }
   table { width: 100%; border-collapse: collapse; font-size: 12px; }
   th, td { padding: 6px; border-bottom: 1px solid #444; text-align: center; }
@@ -105,11 +115,9 @@
         {% if frame_url %}
         <div id="frameInner">
           <img id="frameImg" src="{{ frame_url }}" alt="frame" onerror="alert('프레임 이미지 로드 실패: {{ frame_url }}')">
-          
           {% if layout_url %}
           <img id="layoutImg" src="{{ layout_url }}" alt="layout" onerror="console.log('레이아웃 없음')">
           {% endif %}
-          
           <div id="slotsOverlay"></div>
         </div>
         {% else %}

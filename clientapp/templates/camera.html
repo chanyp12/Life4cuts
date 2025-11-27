@@ -1,135 +1,116 @@
 {% extends 'base.html' %}
 {% block content %}
 <style>
-  .camera-page {
-    position: fixed;
-    top: 0; left: 0; right: 0; bottom: 0;
+  /* [수정] 전체 화면 스크롤 방지 및 꽉 찬 화면 설정 */
+  html, body {
+    margin: 0; padding: 0;
+    width: 100%; height: 100%;
+    overflow: hidden; /* 스크롤바 강제 숨김 */
     background-color: #000;
+  }
+
+  .camera-page {
+    position: absolute; /* fixed 대신 absolute 사용 */
+    top: 0; left: 0; right: 0; bottom: 0;
     display: flex;
     align-items: center;
     justify-content: center;
     overflow: hidden;
   }
 
+  /* 뷰파인더 컨테이너: 화면 꽉 채우기 */
   #viewContainer {
-    width: 100vw;
-    height: 100vh;
+    width: 100%;
+    height: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
     position: relative;
   }
   
+  /* 실제 비디오 영역 */
   #view {
     position: relative;
-    width: auto;
-    height: auto;
-    max-width: 100%;
-    max-height: 100%;
-    aspect-ratio: {{ guide_ratio|default:0.75 }};
+    width: auto; height: auto;
+    max-width: 100%; max-height: 100%;
+    aspect-ratio: {{ guide_ratio|floatformat:5 }};
     overflow: hidden;
     box-shadow: 0 0 50px rgba(0,0,0,0.8);
     background: #000;
   }
 
   #video {
-    width: 100%;
-    height: 100%;
+    width: 100%; height: 100%;
     object-fit: cover;
-    transform: scaleX(-1);
+    transform: scaleX(-1); /* 거울 모드 */
     display: block;
   }
 
+  /* 상단 정보 오버레이 */
   .overlay-info {
-    position: absolute;
-    top: 40px;
-    left: 0; 
-    width: 100%;
-    text-align: center;
-    z-index: 10;
+    position: absolute; top: 20px; left: 0; width: 100%;
+    text-align: center; z-index: 10; pointer-events: none;
   }
   .overlay-badge {
-    background: rgba(0, 0, 0, 0.5);
-    color: #fff;
-    padding: 10px 20px;
-    border-radius: 30px;
-    font-size: 20px;
-    font-weight: bold;
-    border: 1px solid rgba(255,255,255,0.3);
+    background: rgba(0, 0, 0, 0.5); color: #fff;
+    padding: 8px 16px; border-radius: 20px;
+    font-size: 15px; font-weight: bold;
+    border: 1px solid rgba(255,255,255,0.2);
+    backdrop-filter: blur(4px);
   }
 
+  /* 우측 하단 원형 카운트다운 */
   #countdown-circle {
-    position: absolute;
-    bottom: 50px;
-    right: 50px;
-    width: 100px;
-    height: 100px;
-    border-radius: 50%;
-    background: rgba(0, 0, 0, 0.6);
-    border: 5px solid #ffd54f;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 20;
-    opacity: 0; 
-    transition: all 0.3s;
+    position: absolute; bottom: 30px; right: 30px;
+    width: 70px; height: 70px; border-radius: 50%;
+    background: rgba(0, 0, 0, 0.6); border: 4px solid #ffd54f;
+    display: flex; align-items: center; justify-content: center;
+    z-index: 20; opacity: 0; 
+    transform: scale(0.8);
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   }
   
   #countdown-number {
-    color: #fff;
-    font-size: 40px;
-    font-weight: 800;
+    color: #fff; font-size: 32px; font-weight: 800; font-family: sans-serif;
   }
 
   #countdown-circle.active {
-    opacity: 1;
-    animation: pulse 1s infinite;
+    opacity: 1; transform: scale(1); animation: pulse 1s infinite;
   }
 
   @keyframes pulse {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.1); }
-    100% { transform: scale(1); }
+    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 213, 79, 0.7); }
+    70% { transform: scale(1.05); box-shadow: 0 0 0 15px rgba(255, 213, 79, 0); }
+    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 213, 79, 0); }
   }
 
+  /* 플래시 효과 */
   #flash {
-    position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: #fff;
-    opacity: 0;
-    pointer-events: none;
-    z-index: 999;
-    transition: opacity 0.1s;
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    background: #fff; opacity: 0; pointer-events: none;
+    z-index: 30; transition: opacity 0.15s ease-out;
   }
-  #flash.active {
-    opacity: 1;
-    transition: none;
-  }
+  #flash.active { opacity: 1; transition: none; }
 
+  /* 하단 상태 메시지 */
   #status-msg {
-    position: absolute;
-    bottom: 60px;
-    left: 50%;
+    position: absolute; bottom: 40px; left: 50%;
     transform: translateX(-50%);
-    color: #fff;
-    font-size: 24px;
-    font-weight: 600;
+    color: #fff; font-size: 18px; font-weight: 500;
     text-shadow: 0 2px 8px rgba(0,0,0,0.8);
-    z-index: 10;
+    opacity: 0.9; z-index: 10;
   }
 </style>
 
 <div class="camera-page">
   <div id="viewContainer">
     <div class="overlay-info">
-      <span class="overlay-badge" id="info-badge">{{ count }}컷 촬영 중</span>
+      <span class="overlay-badge" id="info-badge">{{ count }}컷 모드 / {{ theme }}</span>
     </div>
 
     <div id="view">
       <video id="video" autoplay playsinline muted></video>
-      <div id="countdown-circle">
-        <span id="countdown-number"></span>
-      </div>
+      <div id="countdown-circle"><span id="countdown-number"></span></div>
       <div id="flash"></div>
     </div>
 
@@ -141,7 +122,7 @@
 </div>
 
 <script>
-const SLOT_RATIO = {{ guide_ratio|default:0.75 }}; 
+const SLOT_RATIO = {{ guide_ratio|floatformat:5 }}; 
 const SHOT_TOTAL = {{ count }};
 const CAPTURE_DELAY_MS = {{ capture_delay_ms|default:5000 }};
 
@@ -154,6 +135,23 @@ const infoBadge = document.getElementById('info-badge');
 const flashEl = document.getElementById('flash');
 const shutterSound = document.getElementById('shutterSound');
 
+// [수정] 소리 재생 함수 개선 (씹힘 방지)
+function playShutter() {
+    if (shutterSound) {
+        // 기존 재생 중이면 즉시 처음으로 되감기
+        shutterSound.currentTime = 0;
+        // play() 호출 (Promise 에러 핸들링 추가)
+        const playPromise = shutterSound.play();
+        if (playPromise !== undefined) {
+            playPromise.catch(error => {
+                console.log('Sound playback failed:', error);
+                // 자동 재생 정책 등으로 막혔을 경우 강제 로드 후 재시도
+                shutterSound.load(); 
+            });
+        }
+    }
+}
+
 let mediaRecorder;
 let recordedChunks = [];
 
@@ -164,49 +162,52 @@ function getCookie(name){
 }
 const CSRF_TOKEN = getCookie('csrftoken');
 
-// [수정] 셔터 소리 재생 함수 (끊김 방지)
-function playShutter() {
-    if (shutterSound) {
-        shutterSound.pause();
-        shutterSound.currentTime = 0; // 항상 처음부터 재생
-        shutterSound.play().catch(e => console.log('Sound error:', e));
-    }
-}
-
 async function initCam(){
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    statusMsg.innerHTML = "🚨 <b>카메라 API 차단됨</b><br>localhost인지 확인하세요.";
+    statusMsg.style.color = "red";
+    return;
+  }
+
   try{
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { width: { ideal: 1920 }, height: { ideal: 1080 }, facingMode: 'user' },
       audio: false
     });
     video.srcObject = stream;
+    
+    // [수정] 카메라 초기화 시 오디오도 미리 로드해둠
+    if(shutterSound) { shutterSound.load(); }
+
     await new Promise(r => video.onloadedmetadata = r);
     video.play();
-    
     initMediaRecorder(stream);
     
   } catch (e){
     console.error(e);
-    statusMsg.innerHTML = "🚨 카메라 오류: " + e.message;
+    let errorText = "카메라 오류";
+    if (e.name === 'NotAllowedError') errorText = "🚨 <b>권한 거부됨</b>";
+    else if (e.name === 'NotFoundError') errorText = "🚨 <b>카메라 없음</b>";
+    statusMsg.innerHTML = errorText;
+    statusMsg.style.color = "#ff6b6b";
   }
 }
 
 function initMediaRecorder(stream) {
   const mimeTypes = ['video/webm;codecs=vp9', 'video/webm', 'video/mp4'];
-  let selectedMimeType = '';
-  for (const type of mimeTypes) {
-    if (MediaRecorder.isTypeSupported(type)) { selectedMimeType = type; break; }
-  }
-  if (selectedMimeType) {
-    mediaRecorder = new MediaRecorder(stream, { mimeType: selectedMimeType });
-    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
-  }
+  let selectedMimeType = mimeTypes.find(type => MediaRecorder.isTypeSupported(type)) || '';
+  if (!selectedMimeType) return;
+
+  try { mediaRecorder = new MediaRecorder(stream, { mimeType: selectedMimeType }); } catch (e) {}
+
+  mediaRecorder.ondataavailable = (event) => {
+    if (event.data.size > 0) recordedChunks.push(event.data);
+  };
 }
 
 function startRecording() {
   if (mediaRecorder && mediaRecorder.state === 'inactive') {
-    recordedChunks = [];
-    mediaRecorder.start();
+    recordedChunks = []; mediaRecorder.start();
   }
 }
 
@@ -222,39 +223,32 @@ function stopRecording() {
 }
 
 async function waitMsWithCountdown(ms){
-  startRecording(); // 영상 녹화 시작
+  startRecording();
   countdownCircle.classList.add('active');
-  
   return new Promise(resolve=>{
     const start = performance.now();
     function tick(now){
       const elapsed = now - start;
       const remain = Math.max(0, ms - elapsed);
       const s = Math.ceil(remain / 1000);
-      
-      if (s > 0 && s <= 5) countdownNum.textContent = s;
-      else countdownNum.textContent = '';
-      
-      if (remain <= 0) resolve();
-      else requestAnimationFrame(tick);
+      if (s > 0 && s <= 5) countdownNum.textContent = s; else countdownNum.textContent = '';
+      if (remain <= 0) resolve(); else requestAnimationFrame(tick);
     }
     requestAnimationFrame(tick);
   });
 }
 
 async function captureAndUpload(){
-  const videoBlob = await stopRecording(); // 녹화 종료 및 영상 파일 획득
+  const videoBlob = await stopRecording();
   
-  // 플래시 및 소리
+  // 찰칵 효과 및 소리
   flashEl.classList.add('active');
-  playShutter(); // [수정] 소리 재생
   setTimeout(() => flashEl.classList.remove('active'), 150);
+  playShutter(); 
   
   countdownCircle.classList.remove('active');
 
-  // 캔버스 캡처
-  const vw = video.videoWidth;
-  const vh = video.videoHeight;
+  const vw = video.videoWidth; const vh = video.videoHeight;
   const videoRatio = vw / vh;
   let cropW, cropH, sx, sy;
 
@@ -266,31 +260,22 @@ async function captureAndUpload(){
     sx = 0; sy = (vh - cropH) / 2;
   }
 
-  canvas.width = cropW;
-  canvas.height = cropH;
+  canvas.width = cropW; canvas.height = cropH;
   const ctx = canvas.getContext('2d');
-  
-  ctx.translate(cropW, 0);
-  ctx.scale(-1, 1);
+  ctx.translate(cropW, 0); ctx.scale(-1, 1);
   ctx.drawImage(video, sx, sy, cropW, cropH, 0, 0, cropW, cropH);
   
-  const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
-
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
   const formData = new FormData();
   formData.append('data_url', dataUrl);
-  if (videoBlob) {
-    formData.append('video', videoBlob, 'shot.webm');
-  }
+  if (videoBlob) formData.append('video', videoBlob, 'shot.webm');
 
-  statusMsg.textContent = '저장 중...';
+  statusMsg.textContent = '저장 중...'; statusMsg.style.color = '#ffd54f';
   
   try {
     const res = await fetch("{% url 'upload_capture' %}", {
-      method: 'POST',
-      headers: { 'X-CSRFToken': CSRF_TOKEN },
-      body: formData
+      method: 'POST', headers: { 'X-CSRFToken': CSRF_TOKEN }, body: formData
     });
-    
     if(res.ok) {
       const js = await res.json();
       return { saved: true, count: js.count };
@@ -301,16 +286,14 @@ async function captureAndUpload(){
 
 async function autoSequence(){
   await initCam();
-  await new Promise(r => setTimeout(r, 1000));
+  await new Promise(r => setTimeout(r, 1500));
 
   let taken = 0;
-  infoBadge.textContent = `0 / ${SHOT_TOTAL} | 촬영 시작`;
+  infoBadge.textContent = `0 / ${SHOT_TOTAL} | ${ '{{ theme }}' }`;
 
   while (taken < SHOT_TOTAL){
-    const currentShot = taken + 1;
-    statusMsg.textContent = `촬영 준비`;
-    statusMsg.style.color = '#fff';
-    infoBadge.textContent = `${currentShot} / ${SHOT_TOTAL}번째 컷`;
+    statusMsg.textContent = `촬영 준비`; statusMsg.style.color = '#fff';
+    infoBadge.textContent = `${taken + 1} / ${SHOT_TOTAL} | ${ '{{ theme }}' }`;
     
     await waitMsWithCountdown(CAPTURE_DELAY_MS);
     
@@ -321,20 +304,17 @@ async function autoSequence(){
       taken = result.count;
     } else {
       statusMsg.textContent = '재시도...';
-      await new Promise(r=>setTimeout(r,1000));
-      continue;
+      await new Promise(r=>setTimeout(r,1000)); continue;
     }
 
     if (taken < SHOT_TOTAL) {
-      statusMsg.textContent = '다음 포즈 준비하세요!';
-      await new Promise(r => setTimeout(r, 2000));
+      statusMsg.textContent = '다음 촬영 준비...'; statusMsg.style.color = '#ddd';
+      await new Promise(r => setTimeout(r, 1500));
     }
   }
 
-  statusMsg.textContent = '촬영 끝! 사진을 고르러 갑니다.';
-  setTimeout(() => {
-    window.location.href = "{% url 'preview' %}"; // 혹은 select-frame 등 다음 단계로
-  }, 1500);
+  statusMsg.textContent = '완료! 이동합니다.'; statusMsg.style.color = '#00d1b2';
+  setTimeout(() => { window.location.href = "{% url 'preview' %}"; }, 1000);
 }
 
 autoSequence();

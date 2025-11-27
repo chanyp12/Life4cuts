@@ -1,120 +1,105 @@
 {% extends 'base.html' %}
 {% block content %}
 <style>
-  .theme-page{
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    padding: 16px;
-    box-sizing: border-box;
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden; background-color: #1a1a1a;
   }
+  .theme-page {
+    width: 100%; height: 100%;
+    display: flex; flex-direction: column;
+    padding: 20px; box-sizing: border-box;
+    overflow: hidden;
+  }
+  .theme-header { flex: 0 0 auto; margin-bottom: 20px; }
+  .theme-header h1 { margin: 0; font-size: 24px; color: #fff; }
+  .theme-header p { margin: 5px 0 0; font-size: 14px; color: #aaa; }
 
-  .theme-header{
-    margin-bottom: 8px;
+  /* 테마 목록 그리드 */
+  .theme-grid {
+    flex: 1; 
+    overflow-y: auto; /* 세로 스크롤 허용 */
+    display: grid;
+    /* 카드의 최소 너비를 조금 줄여서 여러 개가 보이게 조정 */
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 20px;
+    padding-bottom: 20px;
   }
+  .theme-grid::-webkit-scrollbar { width: 8px; }
+  .theme-grid::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
 
-  .theme-header-top{
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .back-btn{
-    font-size: 13px;
-    padding: 8px 14px;
-    border-radius: 999px;
-    border: 1px solid #555;
-    background: #222;
-    color: #fff;
-    cursor: pointer;
-  }
-  .back-btn:hover{
-    background: #333;
-  }
-
-  /* 프레임 리스트: 좌우 스크롤 */
-  .theme-list-wrap{
-    flex: 1;
-    display: flex;
-    align-items: center;
-    min-height: 0;
-    overflow-x: auto;
-    overflow-y: hidden;
-    gap: 24px;
-    padding: 8px 4px;
-  }
-
-  .theme-card{
-    flex: 0 0 auto;
-    background: #111;
-    border-radius: 18px;
-    padding: 12px 12px 16px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    cursor: pointer;
-    box-shadow: 0 2px 6px rgba(0,0,0,.5);
-    transition: transform .15s, box-shadow .15s, border-color .15s;
-    border: 2px solid transparent;
-  }
-  .theme-card:hover{
-    transform: translateY(-2px) scale(1.02);
-    box-shadow: 0 4px 12px rgba(0,0,0,.7);
-    border-color: #00d1b2;
-  }
-
-  .theme-card-img-wrap{
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .theme-card-img-wrap img{
-    height: 60vh;          /* 세로로 크게 */
-    width: auto;
-    max-width: 260px;
-    object-fit: contain;   /* 비율 유지 */
-    display: block;
+  .theme-card {
     background: #000;
-    border-radius: 10px;
+    border: 2px solid #333;
+    border-radius: 12px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex; flex-direction: column;
+  }
+  .theme-card:hover {
+    border-color: #00d1b2;
+    transform: translateY(-4px);
+  }
+  
+  /* [수정] 썸네일 이미지 비율 조정 */
+  .theme-thumb {
+    width: 100%;
+    /* 4컷 프레임(4x1)은 매우 길쭉하므로 비율을 1:3 정도로 설정합니다. 
+       object-fit: cover를 사용하면 꽉 차게 보이고, 
+       contain을 사용하면 전체가 다 보입니다. 프레임 확인을 위해 contain 추천.
+    */
+    aspect-ratio: 1 / 2.8; 
+    object-fit: contain; 
+    background: #111; /* 빈 공간은 어두운 배경 */
+    display: block;
+  }
+  
+  .theme-name {
+    padding: 12px;
+    font-size: 14px;
+    color: #fff;
+    text-align: center;
+    background: #222;
+    font-weight: bold;
+    border-top: 1px solid #333;
   }
 
-  .theme-card-body{
-    margin-top: 8px;
-    font-weight: 700;
-    font-size: 14px;
+  /* 비어있을 때 메시지 */
+  .empty-msg {
+    color: #888; text-align: center; margin-top: 50px;
+    grid-column: 1 / -1; font-size: 16px;
   }
 </style>
 
 <div class="theme-page">
   <div class="theme-header">
-    <div class="theme-header-top">
-      <div>
-        <h1>{{ count }}장 테마 선택</h1>
-        <p style="font-size:13px;opacity:.8">
-          사용할 프레임 테마를 선택하세요. 좌우로 스크롤해서 더 많은 프레임을 볼 수 있습니다.
-        </p>
-      </div>
-
-      <!-- 이전 페이지(촬영 장수 선택)로 돌아가기 -->
-      <button type="button" class="back-btn"
-              onclick="location.href='{% url 'select_shot' %}'">
-        ← 이전 단계
-      </button>
-    </div>
+    <h1>테마 선택</h1>
+    <p>{{ count }}컷 프레임 디자인을 선택해주세요.</p>
   </div>
 
-  <div class="theme-list-wrap">
-    {% for t in themes %}
-      <div class="theme-card"
-           onclick="location.href='{% url 'camera' %}?count={{count}}&theme={{t.name}}'">
-        <div class="theme-card-img-wrap">
-          <img src="{{ t.thumb }}" alt="{{ t.name }}">
-        </div>
-        <div class="theme-card-body">{{ t.name }}</div>
+  <div class="theme-grid">
+    {% for theme in themes %}
+      <div class="theme-card" onclick="location.href='{% url 'camera' %}?theme={{ theme.name }}'">
+        <img src="{{ theme.thumb }}" alt="{{ theme.name }}" class="theme-thumb">
+        <div class="theme-name">{{ theme.name }}</div>
+      </div>
+    {% empty %}
+      <div class="empty-msg">
+        <p>⚠️ 등록된 테마가 없습니다.</p>
+        <p style="font-size:13px; margin-top:8px; line-height: 1.6; color: #aaa;">
+          아래 경로에서 <strong>{{ mode }}</strong> 폴더를 찾을 수 없습니다.<br>
+          <span style="color:#ffd54f; word-break: break-all;">{{ debug_path }}</span><br>
+          <br>
+          1. 해당 경로에 <strong>{{ mode }}</strong> 폴더가 있는지 확인하세요.<br>
+          2. 폴더 안에 테마 폴더와 <strong>frame.png</strong>가 있는지 확인하세요.
+        </p>
       </div>
     {% endfor %}
+  </div>
+
+  <div style="flex:0 0 auto; margin-top:10px;">
+    <button onclick="history.back()" style="padding:10px 20px; border-radius:6px; border:none; background:#555; color:white; cursor:pointer;">뒤로가기</button>
   </div>
 </div>
 {% endblock %}

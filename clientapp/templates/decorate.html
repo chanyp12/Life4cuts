@@ -1,7 +1,20 @@
 {% extends 'base.html' %}
 {% block content %}
 <style>
-  .decor-page{ width:100%; height:100%; display:flex; flex-direction:column; padding:16px; box-sizing:border-box; background-color: #1a1a1a; }
+  /* [수정] 스크롤 방지 */
+  html, body {
+    margin: 0; padding: 0;
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background-color: #1a1a1a;
+  }
+  
+  .decor-page{
+    width:100%; height:100%;
+    display:flex; flex-direction:column;
+    padding:16px; box-sizing:border-box; background-color: #1a1a1a;
+    overflow: hidden;
+  }
   .decor-main{ flex:1; display:flex; gap:20px; min-height:0; overflow: hidden; }
   .decor-left{ flex:1; display:flex; align-items:center; justify-content:center; min-width:0; background: #000; border-radius: 12px; padding: 20px; position: relative; }
   #baseWrap { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; position: relative; }
@@ -86,10 +99,7 @@ let currentMode = null;
 let startX = 0, startY = 0;
 let initialParam = {}; 
 
-// ★ 공용 폴더 경로 설정 ★
-function getStickerPath(id) {
-    return `/static/frames/stickers/${id}.png`;
-}
+function getStickerPath(id) { return `/static/frames/stickers/${id}.png`; }
 
 function layoutOverlay(){
   if (!baseImg || !baseWrap || !baseInner) return;
@@ -99,8 +109,7 @@ function layoutOverlay(){
   const scale = Math.min(wrapRect.width / natW, wrapRect.height / natH);
   const finalW = natW * scale; const finalH = natH * scale;
 
-  baseInner.style.width = finalW + 'px';
-  baseInner.style.height = finalH + 'px';
+  baseInner.style.width = finalW + 'px'; baseInner.style.height = finalH + 'px';
 
   const cvsW = (canvasInfo && canvasInfo.width) ? canvasInfo.width : natW;
   const cvsH = (canvasInfo && canvasInfo.height) ? canvasInfo.height : natH;
@@ -119,7 +128,7 @@ function renderStickers(){
 
     const img = document.createElement('img');
     img.className = 'sticker-instance';
-    img.src = getStickerPath(st.id); // 경로 적용
+    img.src = getStickerPath(st.id); 
     img.draggable = false;
 
     const hResize = document.createElement('div'); hResize.className = 'handle-resize';
@@ -141,7 +150,7 @@ function renderPalette(){
   stickerIds.forEach(id=>{
     const div = document.createElement('div');
     div.className = 'sticker-thumb';
-    div.innerHTML = `<img src="${getStickerPath(id)}">`; // 경로 적용
+    div.innerHTML = `<img src="${getStickerPath(id)}">`;
     div.onclick = () => addSticker(id);
     stickerPalette.appendChild(div);
   });
