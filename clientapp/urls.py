@@ -1,5 +1,6 @@
-# clientapp/urls.py
 from django.urls import path
+from django.conf import settings
+from django.conf.urls.static import static
 from . import views
 
 urlpatterns = [
@@ -16,11 +17,17 @@ urlpatterns = [
 
     path('upload-capture', views.upload_capture, name='upload_capture'),
 
-    # 관리자 모드 화면
     path('admin-mode', views.admin_mode, name='admin_mode'),
-    # Django 기본 /admin/ 과 안 겹치게 prefix 변경
     path('photo-admin/save-slots', views.admin_save_slots, name='admin_save_slots'),
 
-    # 인쇄 중 화면
     path('printing', views.printing, name='printing'),
 ]
+
+# [핵심 수정] Static, Media, Temp 폴더 서빙 설정
+if settings.DEBUG:
+    # 정적 파일 (프레임 등)
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+    # 미디어 파일 (기존)
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    # [추가] 임시 파일 (촬영된 사진 등) - 이걸 추가해야 사진이 보입니다!
+    urlpatterns += static(settings.TEMP_URL, document_root=settings.TEMP_ROOT)

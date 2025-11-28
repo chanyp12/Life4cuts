@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import shutil
 import base64
 import uuid
 from urllib.parse import urlparse
@@ -15,7 +16,7 @@ from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.conf import settings
 
-# 이미지 합성 함수 가져오기
+# 이미지 합성 함수
 try:
     from utils.combine_photo_v2 import combine_with_frame
 except ImportError:
@@ -23,48 +24,43 @@ except ImportError:
     sys.path.append(str(settings.BASE_DIR))
     from utils.combine_photo_v2 import combine_with_frame
 
+# MoviePy 설정
+MOVIEPY_AVAILABLE = False
+try:
+    from moviepy.editor import VideoFileClip, ImageClip, CompositeVideoClip
+    MOVIEPY_AVAILABLE = True
+except ImportError:
+    print("🚨 'moviepy' 미설치")
+
 # -----------------------
-# 경로 및 로딩 헬퍼 함수 (앱 패키지 대응 버전)
+# 경로 및 로딩 헬퍼 함수
 # -----------------------
 
 def _get_base_path():
-    """
-    [핵심 수정] 실행 환경에 따른 최상위 루트 경로 반환
-    """
     if getattr(sys, 'frozen', False):
-        # 실행 파일 경로: .../Life4Cut.app/Contents/MacOS/Life4Cut
-        executable_path = Path(sys.executable)
-        
-        # Case 1: Mac App Bundle (.app) 실행 중일 때
-        # .app 폴더와 나란히 있는 static을 찾으려면 4단계 위로 올라가야 함
-        # .parent(MacOS) -> .parent(Contents) -> .parent(AppBundle) -> .parent(Root)
-        mac_app_root = executable_path.parent.parent.parent.parent
-        if (mac_app_root / 'static').exists():
-            return mac_app_root
-            
-        # Case 2: 일반 PyInstaller OneDir/OneFile 실행 (Unix Executable)
-        # 실행 파일 바로 옆을 가리킴
-        return executable_path.parent
+        if sys.platform == 'darwin' and '.app' in sys.executable:
+            return Path(sys.executable).parent.parent.parent.parent
+        return Path(sys.executable).parent
     else:
-        # 개발 환경 (python manage.py runserver)
         return settings.BASE_DIR
 
 def _get_frames_root():
-    """static/frames 폴더의 절대 경로"""
     return _get_base_path() / 'static' / 'frames'
 
+def _get_date_str():
+    return datetime.now().strftime("%Y%m%d")
+
+def _get_time_str():
+    return datetime.now().strftime("%H%M%S")
+
 def _get_output_paths():
-    """결과물 저장 경로 (Output/YYYYMMDD/img)"""
-    today_str = datetime.now().strftime("%Y%m%d")
-    
-    # 앱 패키지 밖(사용자가 보는 폴더)에 Output 폴더 생성
+    today_str = _get_date_str()
     base_output = _get_base_path() / 'Output' / today_str
     img_dir = base_output / 'img'
     video_dir = base_output / 'video'
     
     img_dir.mkdir(parents=True, exist_ok=True)
     video_dir.mkdir(parents=True, exist_ok=True)
-    
     return img_dir, video_dir
 
 def _clear_captures_in_session(request):
@@ -76,10 +72,17 @@ def _media_url_to_path(u: str):
     if not u: return None
     if u.startswith('file://'): return u[7:] if os.path.exists(u[7:]) else None
     
+    # URL -> 로컬 경로 변환
     if u.startswith(settings.MEDIA_URL):
         rel = u[len(settings.MEDIA_URL):]
         fs_path = settings.MEDIA_ROOT / rel
         return str(fs_path) if fs_path.exists() else None
+    
+    if u.startswith(settings.TEMP_URL):
+        rel = u[len(settings.TEMP_URL):]
+        fs_path = settings.TEMP_ROOT / rel
+        return str(fs_path) if fs_path.exists() else None
+        
     return None
 
 def _common_stickers_dir():
@@ -108,6 +111,69 @@ def _get_capture_delay(meta: dict) -> int:
     default = getattr(settings, 'CAPTURE_DELAY_MS', 5000)
     return int(meta.get('capture_delay_ms', default))
 
+# [수정] 비디오 합성 함수 (webm 코덱 사용)
+def _generate_combined_video(frame_path, slots, video_paths, output_path):
+    if not MOVIEPY_AVAILABLE:
+        print(">> [Video Skip] MoviePy not installed.")
+        return False
+        
+    try:
+        print(f">> [Video Start] 합성 시작: {output_path}")
+        
+        frame_clip = ImageClip(frame_path)
+        
+        duration = 5 
+        valid_videos = [v for v in video_paths if v and os.path.exists(v)]
+        if valid_videos:
+            try:
+                temp = VideoFileClip(valid_videos[0])
+                duration = temp.duration
+                temp.close()
+            except Exception as e:
+                print(f"  - 원본 길이 확인 실패: {e}")
+            
+        frame_clip = frame_clip.set_duration(duration)
+        clips = [frame_clip]
+        
+        added_count = 0
+        for i, v_path in enumerate(video_paths):
+            if v_path and os.path.exists(v_path) and i < len(slots):
+                slot = slots[i]
+                try:
+                    video = VideoFileClip(v_path)
+                    video = video.resize(newsize=(slot['w'], slot['h']))
+                    video = video.set_position((slot['x'], slot['y']))
+                    video = video.set_duration(duration)
+                    clips.append(video)
+                    added_count += 1
+                except Exception as ve:
+                    print(f"  - 비디오({i}) 로드 실패: {ve}")
+        
+        if added_count == 0:
+            print(">> [Video Skip] 합성할 비디오가 없습니다.")
+            return False
+
+        final_video = CompositeVideoClip(clips, size=frame_clip.size)
+        
+        # [핵심] 출력 확장자가 .webm이면 libvpx 사용, mp4면 libx264 사용
+        if output_path.endswith('.webm'):
+            final_video.write_videofile(output_path, fps=24, codec='libvpx', audio_codec='libvorbis', logger=None)
+        else:
+            final_video.write_videofile(output_path, fps=24, codec='libx264', audio_codec='aac', logger=None)
+        
+        final_video.close()
+        for c in clips:
+            try: c.close()
+            except: pass
+            
+        return True
+
+    except Exception as e:
+        print(f"!!! [Video Error] {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
 # -----------------------
 # Views
 # -----------------------
@@ -128,8 +194,6 @@ def select_theme(request):
     try: count = int(request.GET.get('count', '3'))
     except: count = 3
     if count not in (3, 4): count = 3
-
-    # [확인] 4컷 -> 4x1 사용
     mode = '3x1' if count == 3 else '4x1'
 
     request.session['shot_count'] = count
@@ -140,9 +204,6 @@ def select_theme(request):
     frames_root = _get_frames_root()
     mode_dir = frames_root / mode
     
-    # 디버깅 로그 (서버 콘솔 확인용)
-    print(f"\n[DEBUG] select_theme - 현재 탐색 경로: {mode_dir}")
-
     if mode_dir.exists():
         for theme_path in sorted(mode_dir.iterdir()):
             if theme_path.is_dir():
@@ -153,17 +214,9 @@ def select_theme(request):
                         'thumb': f"/static/frames/{mode}/{theme_path.name}/frame.png",
                         'mode': mode
                     })
-                else:
-                    print(f"[SKIP] frame.png 없음: {theme_path.name}")
-    else:
-        print(f"[ERROR] 경로가 존재하지 않음: {mode_dir}")
-
-    # 만약 여전히 못 찾을 경우를 대비해, 템플릿에 현재 탐색 중인 경로를 보여줌
+    
     return render(request, 'select_theme.html', {
-        'themes': themes, 
-        'count': count, 
-        'mode': mode,
-        'debug_path': str(mode_dir) 
+        'themes': themes, 'count': count, 'mode': mode, 'debug_path': str(mode_dir)
     })
 
 @ensure_csrf_cookie
@@ -177,7 +230,6 @@ def camera(request):
 
     meta = _load_meta(mode, theme)
     capture_delay_ms = _get_capture_delay(meta)
-    
     if meta['slots']:
         s0 = meta['slots'][0]
         guide_ratio = s0['w'] / s0['h']
@@ -199,12 +251,8 @@ def upload_capture(request):
     video_file = request.FILES.get('video')
     if not data_url: return JsonResponse({'saved': False}, status=400)
 
-    # 임시 캡처도 앱 패키지 밖(또는 실행 위치) 기준으로 저장
-    base_path = _get_base_path()
-    # settings.MEDIA_ROOT가 절대 경로가 아니면 base_path와 결합
-    # 여기서는 간단하게 base_path 아래 'captures' 생성
-    save_dir = base_path / 'temp_captures'
-    
+    today_str = _get_date_str()
+    save_dir = settings.TEMP_ROOT / 'captures' / today_str
     save_dir.mkdir(parents=True, exist_ok=True)
     
     urls = request.session.get('captured_urls', [])
@@ -215,12 +263,9 @@ def upload_capture(request):
         else: b64data = data_url
         fname_img = f"{uuid.uuid4().hex}.jpg"
         with open(save_dir / fname_img, 'wb') as f: f.write(base64.b64decode(b64data))
-        # 웹 서빙을 위해 MEDIA_URL 매핑이 필요하지만, 일단은 파일 저장 성공 여부 확인
-        # 실제 서빙은 Django runserver의 static/media 설정을 따름
-        # 임시 방편: settings.MEDIA_URL 사용
-        urls.append(f"{settings.MEDIA_URL}captures/{fname_img}")
+        urls.append(f"{settings.TEMP_URL}captures/{today_str}/{fname_img}")
     except Exception as e:
-        print(f"Save Error: {e}")
+        print(f"[ERROR] Save failed: {e}")
         return JsonResponse({'saved': False}, status=500)
 
     if video_file:
@@ -228,7 +273,7 @@ def upload_capture(request):
             fname_vid = f"{uuid.uuid4().hex}.webm"
             with open(save_dir / fname_vid, 'wb+') as dest:
                 for chunk in video_file.chunks(): dest.write(chunk)
-            video_urls.append(f"{settings.MEDIA_URL}captures/{fname_vid}")
+            video_urls.append(f"{settings.TEMP_URL}captures/{today_str}/{fname_vid}")
         except: video_urls.append(None)
     else: video_urls.append(None)
 
@@ -271,8 +316,8 @@ def decorate(request):
     meta = _load_meta(mode, theme)
     images_fs = [_media_url_to_path(u) for u in mapping_urls]
     
-    # 임시 합성 결과
-    out_dir = _get_base_path() / 'temp_outputs'
+    today_str = _get_date_str()
+    out_dir = settings.TEMP_ROOT / 'outputs' / today_str
     out_dir.mkdir(parents=True, exist_ok=True)
     fname = f"base_{uuid.uuid4().hex[:8]}.jpg"
     out_path = out_dir / fname
@@ -282,8 +327,7 @@ def decorate(request):
         combine_with_frame(str(frame_png), {**meta, 'stickers': []}, images_fs, str(out_path), [], None)
     except Exception as e: print(f"Base Compose Error: {e}")
 
-    base_url = f"{settings.MEDIA_URL}temp_outputs/{fname}" # URL 매핑 주의
-    
+    base_url = f"{settings.TEMP_URL}outputs/{today_str}/{fname}"
     sticker_ids = []
     sdir = _common_stickers_dir()
     if sdir.exists(): sticker_ids = [p.stem for p in sorted(sdir.glob('*.png'))]
@@ -304,32 +348,69 @@ def finalize(request):
         
         mode = request.session.get('mode')
         theme = request.session.get('theme')
+        shot_count = request.session.get('shot_count', 4)
         mapping = request.session.get('mapping_urls', [])
         
-        # [핵심] 저장 경로 자동 탐색된 위치 사용
         img_dir, video_dir = _get_output_paths()
+        today_str = _get_date_str()
+        time_str = _get_time_str()
+        filename_base = f"{theme}_{shot_count}cut_{today_str}_{time_str}"
         
-        timestamp = datetime.now().strftime("%H%M%S")
-        unique_id = uuid.uuid4().hex[:6]
-        fname_img = f"final_{timestamp}_{unique_id}.jpg"
-        out_path = img_dir / fname_img
+        fname_img = f"{filename_base}.jpg"
+        out_img_path = img_dir / fname_img
         
         images_fs = [_media_url_to_path(u) for u in mapping]
         frame_png = _get_frames_root() / mode / theme / 'frame.png'
         sticker_dir = _common_stickers_dir()
         meta = _load_meta(mode, theme)
         
-        combine_with_frame(str(frame_png), meta, images_fs, str(out_path), stickers, str(sticker_dir))
+        combine_with_frame(str(frame_png), meta, images_fs, str(out_img_path), stickers, str(sticker_dir))
+        print(f"====== [Image Saved] {out_img_path} ======")
         
-        print(f"====== [저장 성공] 파일 위치: {out_path} ======")
-        request.session['last_output_path'] = str(out_path)
+        # [수정] WebM으로 저장하도록 변경 (ffmpeg 의존성 문제 회피 가능성 높음)
+        fname_video = f"{filename_base}.webm"
+        out_video_path = video_dir / fname_video
+        
+        captured_videos = request.session.get('captured_videos', [])
+        captured_urls = request.session.get('captured_urls', [])
+        
+        selected_video_paths = []
+        for m_url in mapping:
+            if m_url in captured_urls:
+                idx = captured_urls.index(m_url)
+                if idx < len(captured_videos) and captured_videos[idx]:
+                    v_path = _media_url_to_path(captured_videos[idx])
+                    selected_video_paths.append(v_path)
+                else:
+                    selected_video_paths.append(None)
+            else:
+                selected_video_paths.append(None)
+        
+        video_success = False
+        if MOVIEPY_AVAILABLE:
+            # .webm으로 합성 시도
+            video_success = _generate_combined_video(str(frame_png), meta['slots'], selected_video_paths, str(out_video_path))
+        
+        if video_success:
+            print(f"====== [Video Saved] {out_video_path} ======")
+        else:
+            print("====== [Video Backup] 합성 실패로 개별 파일 백업 ======")
+            for i, v_path in enumerate(selected_video_paths):
+                if v_path and os.path.exists(v_path):
+                    ext = os.path.splitext(v_path)[1]
+                    bk_name = f"{filename_base}_shot{i+1}{ext}"
+                    try: shutil.copy2(v_path, video_dir / bk_name)
+                    except: pass
+
+        request.session['last_output_path'] = str(out_img_path)
         request.session.modified = True
         return JsonResponse({'saved': True})
+        
     except Exception as e:
         print(f"Finalize Error: {e}")
         return JsonResponse({'saved': False}, status=500)
 
-# 관리자/인쇄 페이지
+# 관리자/인쇄 등 나머지 동일
 @ensure_csrf_cookie
 def admin_mode(request):
     frames_root = _get_frames_root()

@@ -11,18 +11,22 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'main.settings')
 def run_django():
     """Django 서버 실행 및 DB 초기화"""
     try:
+        # [추가된 부분] 서버 시작 전 자동으로 DB 테이블 생성(Migration) 수행
+        # ---------------------------------------------------------
         import django
         from django.core.management import call_command
         
         print("--> [System] Initializing Django...")
-        django.setup() 
+        django.setup() # 장고 설정 로드
         
         print("--> [System] Checking Database Migrations...")
-        # DB 테이블 자동 생성
+        # DB가 비어있거나 변경사항이 있으면 자동으로 테이블 생성
         call_command('migrate', interactive=False)
-        
+        print("--> [System] Database ready.")
+        # ---------------------------------------------------------
+
         print("--> [System] Starting Django Server...")
-        # 디버그 모드여도 --insecure로 정적파일 서빙 보장
+        # runserver 실행
         sys.argv = ['manage.py', 'runserver', '0.0.0.0:8000', '--noreload', '--insecure']
         execute_from_command_line(sys.argv)
         
@@ -35,11 +39,11 @@ def start_app():
     t.daemon = True
     t.start()
 
-    # 2. 서버 부팅 대기 (2초)
-    time.sleep(2)
+    # 2. 서버 부팅 및 마이그레이션 대기 (시간을 조금 넉넉히 줌)
+    time.sleep(3)
 
     # 3. 앱 창 띄우기
-    window = webview.create_window(
+    webview.create_window(
         title='인생네컷 Photo Booth',
         url='http://localhost:8000', 
         fullscreen=True,
@@ -48,11 +52,11 @@ def start_app():
         confirm_close=True
     )
     
-    # [수정] debug=False로 설정하여 우측 개발자 도구 제거
+    # debug=True 유지 (에러 확인용)
     webview.start(debug=False)
 
 if __name__ == '__main__':
-    # PyInstaller 환경 경로 보정
+    # PyInstaller 환경에서 경로 보정
     if getattr(sys, 'frozen', False):
         sys.path.append(sys._MEIPASS)
         

@@ -1,17 +1,11 @@
 {% extends 'base.html' %}
 {% block content %}
 <style>
-  /* [수정] 전체 화면 스크롤 방지 및 꽉 찬 화면 설정 */
-  html, body {
-    margin: 0; padding: 0;
-    width: 100%; height: 100%;
-    overflow: hidden; /* 스크롤바 강제 숨김 */
-    background-color: #000;
-  }
-
+  /* 전체 화면 레이아웃 (검은 배경, 여백 없음) */
   .camera-page {
-    position: absolute; /* fixed 대신 absolute 사용 */
+    position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
+    background-color: #000;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -20,8 +14,8 @@
 
   /* 뷰파인더 컨테이너: 화면 꽉 채우기 */
   #viewContainer {
-    width: 100%;
-    height: 100%;
+    width: 100vw;
+    height: 100vh;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -31,8 +25,10 @@
   /* 실제 비디오 영역 */
   #view {
     position: relative;
-    width: auto; height: auto;
-    max-width: 100%; max-height: 100%;
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: 100%;
     aspect-ratio: {{ guide_ratio|floatformat:5 }};
     overflow: hidden;
     box-shadow: 0 0 50px rgba(0,0,0,0.8);
@@ -40,7 +36,8 @@
   }
 
   #video {
-    width: 100%; height: 100%;
+    width: 100%;
+    height: 100%;
     object-fit: cover;
     transform: scaleX(-1); /* 거울 모드 */
     display: block;
@@ -48,34 +45,55 @@
 
   /* 상단 정보 오버레이 */
   .overlay-info {
-    position: absolute; top: 20px; left: 0; width: 100%;
-    text-align: center; z-index: 10; pointer-events: none;
+    position: absolute;
+    top: 20px;
+    left: 0; 
+    width: 100%;
+    text-align: center;
+    z-index: 10;
+    pointer-events: none;
   }
   .overlay-badge {
-    background: rgba(0, 0, 0, 0.5); color: #fff;
-    padding: 8px 16px; border-radius: 20px;
-    font-size: 15px; font-weight: bold;
+    background: rgba(0, 0, 0, 0.5);
+    color: #fff;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 15px;
+    font-weight: bold;
     border: 1px solid rgba(255,255,255,0.2);
     backdrop-filter: blur(4px);
   }
 
   /* 우측 하단 원형 카운트다운 */
   #countdown-circle {
-    position: absolute; bottom: 30px; right: 30px;
-    width: 70px; height: 70px; border-radius: 50%;
-    background: rgba(0, 0, 0, 0.6); border: 4px solid #ffd54f;
-    display: flex; align-items: center; justify-content: center;
-    z-index: 20; opacity: 0; 
+    position: absolute;
+    bottom: 30px;
+    right: 30px;
+    width: 70px;
+    height: 70px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.6);
+    border: 4px solid #ffd54f;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
+    opacity: 0; 
     transform: scale(0.8);
     transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   }
   
   #countdown-number {
-    color: #fff; font-size: 32px; font-weight: 800; font-family: sans-serif;
+    color: #fff;
+    font-size: 32px;
+    font-weight: 800;
+    font-family: sans-serif;
   }
 
   #countdown-circle.active {
-    opacity: 1; transform: scale(1); animation: pulse 1s infinite;
+    opacity: 1;
+    transform: scale(1);
+    animation: pulse 1s infinite;
   }
 
   @keyframes pulse {
@@ -86,19 +104,31 @@
 
   /* 플래시 효과 */
   #flash {
-    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-    background: #fff; opacity: 0; pointer-events: none;
-    z-index: 30; transition: opacity 0.15s ease-out;
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: #fff;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 30;
+    transition: opacity 0.15s ease-out;
   }
-  #flash.active { opacity: 1; transition: none; }
+  #flash.active {
+    opacity: 1;
+    transition: none;
+  }
 
   /* 하단 상태 메시지 */
   #status-msg {
-    position: absolute; bottom: 40px; left: 50%;
+    position: absolute;
+    bottom: 40px;
+    left: 50%;
     transform: translateX(-50%);
-    color: #fff; font-size: 18px; font-weight: 500;
+    color: #fff;
+    font-size: 18px;
+    font-weight: 500;
     text-shadow: 0 2px 8px rgba(0,0,0,0.8);
-    opacity: 0.9; z-index: 10;
+    opacity: 0.9;
+    z-index: 10;
   }
 </style>
 
@@ -110,7 +140,11 @@
 
     <div id="view">
       <video id="video" autoplay playsinline muted></video>
-      <div id="countdown-circle"><span id="countdown-number"></span></div>
+      
+      <div id="countdown-circle">
+        <span id="countdown-number"></span>
+      </div>
+
       <div id="flash"></div>
     </div>
 
@@ -135,20 +169,14 @@ const infoBadge = document.getElementById('info-badge');
 const flashEl = document.getElementById('flash');
 const shutterSound = document.getElementById('shutterSound');
 
-// [수정] 소리 재생 함수 개선 (씹힘 방지)
+// [수정] 소리 재생 함수 개선 (복제 재생 방식)
 function playShutter() {
     if (shutterSound) {
-        // 기존 재생 중이면 즉시 처음으로 되감기
-        shutterSound.currentTime = 0;
-        // play() 호출 (Promise 에러 핸들링 추가)
-        const playPromise = shutterSound.play();
-        if (playPromise !== undefined) {
-            playPromise.catch(error => {
-                console.log('Sound playback failed:', error);
-                // 자동 재생 정책 등으로 막혔을 경우 강제 로드 후 재시도
-                shutterSound.load(); 
-            });
-        }
+        // 기존 오디오 요소를 직접 재생하면 연속 촬영 시 씹힐 수 있습니다.
+        // 노드를 복제(cloneNode)하여 재생하면 겹쳐서 소리가 나도 끊기지 않습니다.
+        const sound = shutterSound.cloneNode();
+        sound.volume = 1.0;
+        sound.play().catch(e => console.log('Sound blocked:', e));
     }
 }
 
@@ -164,7 +192,7 @@ const CSRF_TOKEN = getCookie('csrftoken');
 
 async function initCam(){
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    statusMsg.innerHTML = "🚨 <b>카메라 API 차단됨</b><br>localhost인지 확인하세요.";
+    statusMsg.innerHTML = "🚨 <b>카메라 오류</b><br>카메라를 찾을 수 없습니다.";
     statusMsg.style.color = "red";
     return;
   }
@@ -176,8 +204,8 @@ async function initCam(){
     });
     video.srcObject = stream;
     
-    // [수정] 카메라 초기화 시 오디오도 미리 로드해둠
-    if(shutterSound) { shutterSound.load(); }
+    // 오디오 미리 로드
+    if(shutterSound) shutterSound.load();
 
     await new Promise(r => video.onloadedmetadata = r);
     video.play();
@@ -185,10 +213,7 @@ async function initCam(){
     
   } catch (e){
     console.error(e);
-    let errorText = "카메라 오류";
-    if (e.name === 'NotAllowedError') errorText = "🚨 <b>권한 거부됨</b>";
-    else if (e.name === 'NotFoundError') errorText = "🚨 <b>카메라 없음</b>";
-    statusMsg.innerHTML = errorText;
+    statusMsg.innerHTML = "🚨 <b>카메라 권한 거부됨</b>";
     statusMsg.style.color = "#ff6b6b";
   }
 }

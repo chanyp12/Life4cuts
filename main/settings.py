@@ -6,22 +6,20 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ------------------------------------------------------------------
-# [핵심 1] PyInstaller 및 경로 설정 (실행 파일 이동 대응)
+# [핵심 1] PyInstaller 및 경로 설정
 # ------------------------------------------------------------------
 if getattr(sys, 'frozen', False):
-    # 1. 읽기 전용 (EXE 내부 압축 해제 경로: 코드, 템플릿 등)
+    # 1. 읽기 전용 (EXE 내부)
     BASE_DIR = Path(sys._MEIPASS)
     
-    # 2. 실행 파일 위치 (EXE 파일이 있는 실제 폴더)
+    # 2. 실행 파일 위치
     if sys.platform == 'darwin' and '.app' in sys.executable:
-        # Mac App Bundle의 경우 .app 번들 폴더가 있는 위치를 기준으로 잡음
         EXEC_DIR = Path(sys.executable).parent.parent.parent.parent
     else:
-        # Windows/Linux
         EXEC_DIR = Path(sys.executable).parent
     
-    # 3. 데이터 저장 경로 (수정됨: 실행 파일 옆 'Data' 폴더 사용)
-    # Documents 폴더 대신 실행 파일 옆에 저장하여 권한 문제 해결 및 경로 단순화
+    # 3. [수정] 데이터 저장 경로를 실행 파일 옆 'Data' 폴더로 변경
+    # (사용자가 직관적으로 파일을 찾을 수 있게 함)
     DATA_DIR = EXEC_DIR / 'Data'
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 else:
@@ -34,9 +32,7 @@ else:
 # 기본 Django 설정
 # ------------------------------------------------------------------
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-key-dev')
-
 DEBUG = True 
-
 ALLOWED_HOSTS = ['*']
 
 INSTALLED_APPS = [
@@ -80,9 +76,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'main.wsgi.application'
 
-# ------------------------------------------------------------------
-# Database (DATA_DIR에 저장)
-# ------------------------------------------------------------------
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
@@ -94,12 +87,10 @@ DATABASES = {
 # Static Files
 # ------------------------------------------------------------------
 STATIC_URL = 'static/'
-
 if getattr(sys, 'frozen', False):
     STATICFILES_DIRS = [EXEC_DIR / 'static']
 else:
     STATICFILES_DIRS = [BASE_DIR / 'static']
-
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 FRAMES_DIR = EXEC_DIR / 'static' / 'frames'
@@ -109,19 +100,20 @@ STICKERS_DIR = EXEC_DIR / 'static' / 'stickers'
 CAPTURE_DELAY_MS = 5000
 
 # ------------------------------------------------------------------
-# Media Files (촬영 사진 저장소)
+# Media & Temp Files
 # ------------------------------------------------------------------
 MEDIA_URL = '/media/'
 MEDIA_ROOT = DATA_DIR / 'media'
 
-CAPTURE_DIR = MEDIA_ROOT / 'captures'
-OUTPUT_DIR = MEDIA_ROOT / 'outputs' 
+# Temp 경로 설정
+TEMP_URL = '/temp/'
+TEMP_ROOT = DATA_DIR / 'temp'
 
 try:
-    CAPTURE_DIR.mkdir(parents=True, exist_ok=True)
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
+    TEMP_ROOT.mkdir(parents=True, exist_ok=True)
 except Exception as e:
-    print(f"Media folder creation failed: {e}")
+    print(f"Folder creation failed: {e}")
 
 # ------------------------------------------------------------------
 # 기타
