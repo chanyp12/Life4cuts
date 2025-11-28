@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+{% block content %}
+<style>
+    .page-container {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        width: 100%; height: 100%; text-align: center;
+    }
+    .theme-list {
+        display: flex; flex-wrap: wrap; gap: 20px; justify-content: center;
+        max-width: 1000px; margin-top: 30px;
+    }
+    .theme-item {
+        cursor: pointer; transition: transform 0.2s; border-radius: 10px; overflow: hidden;
+    }
+    .theme-item:hover { transform: scale(1.05); border: 2px solid #ff6b6b; }
+    .theme-thumb {
+        width: 200px; height: auto; display: block;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    }
+    .btn-back {
+        margin-top: 40px; padding: 10px 30px; 
+        background: #555; color: white; border: none; border-radius: 5px; 
+        font-size: 18px; cursor: pointer;
+    }
+</style>
+
+<div class="page-container">
+    <div style="margin-bottom: 20px;">
+        <h1 style="color:white; margin:0;">테마 선택</h1>
+        <p style="color:#aaa;">원하는 디자인을 선택해주세요.</p>
+    </div>
+
+    <div class="theme-list">
+        {% for t in themes %}
+        <div class="theme-item" onclick="selectTheme('{{ t.name }}')">
+            <img src="{{ t.thumb }}" class="theme-thumb">
+        </div>
+        {% empty %}
+        <p style="color: red;">표시할 테마가 없습니다.<br>(static/frames 폴더 경로를 확인하세요)</p>
+        {% endfor %}
+    </div>
+
+    <button class="btn-back" onclick="history.back()">뒤로가기</button>
+</div>
+
+<script>
+function selectTheme(themeName) {
+    location.href = "{% url 'camera' %}?theme=" + themeName;
+}
+</script>
+{% endblock %}

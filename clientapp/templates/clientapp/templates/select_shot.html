@@ -1,0 +1,108 @@
+{% extends 'base.html' %}
+{% block content %}
+<style>
+  .page-root{
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
+    box-sizing: border-box;
+  }
+  .page-header{
+    margin-bottom: 8px;
+  }
+  .shot-wrap{
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 48px;
+    flex-wrap: nowrap;
+    min-height: 0;
+  }
+  .shot-option{
+    cursor: pointer;
+    text-align: center;
+  }
+  .shot-card{
+    border-radius: 20px;
+    padding: 16px;
+    background: #111;
+    box-shadow: 0 2px 8px rgba(0,0,0,.5);
+    border: 2px solid transparent;
+    transition: transform .15s, box-shadow .15s, border-color .15s;
+    width: 260px;
+    height: 60vh;              /* 두 카드 모두 같은 세로 높이 */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+  }
+  .shot-card:hover{
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 4px 14px rgba(0,0,0,.7);
+    border-color: #00d1b2;
+  }
+  .shot-card img{
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: 100%;              /* 세로를 카드 높이에 맞춤 → 3컷/4컷 높이 동일 */
+    object-fit: contain;       /* 비율 유지 */
+    display: block;
+    border-radius: 14px;
+    background: #000;
+  }
+  .shot-label{
+    margin-top: 10px;
+    font-size: 15px;
+    font-weight: 700;
+  }
+  .shot-desc{
+    font-size: 12px;
+    opacity: .75;
+    margin-top: 4px;
+  }
+</style>
+
+<div class="page-root">
+  <div class="page-header">
+    <h1>촬영 장수 선택</h1>
+    <p style="font-size:13px;opacity:.8">
+      원하는 레이아웃을 선택하세요. 선택 후 테마 선택 화면으로 이동합니다.
+    </p>
+  </div>
+
+  <div class="shot-wrap">
+    <!-- 3컷 예시 -->
+    <div class="shot-option" data-count="3">
+      <div class="shot-card">
+        <img src="/static/example/3cut_sample.png" alt="3컷 예시">
+      </div>
+      <div class="shot-label">3컷</div>
+      <div class="shot-desc">세로 3장 레이아웃</div>
+    </div>
+
+    <!-- 4컷 예시 -->
+    <div class="shot-option" data-count="4">
+      <div class="shot-card">
+        <img src="/static/example/4cut_sample.png" alt="4컷 예시">
+      </div>
+      <div class="shot-label">4컷</div>
+      <div class="shot-desc">클래식 네 컷 레이아웃</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const options = document.querySelectorAll('.shot-option');
+options.forEach(opt=>{
+  opt.addEventListener('click', ()=>{
+    const count = opt.dataset.count;
+    const url = "{% url 'select_theme' %}" + "?count=" + encodeURIComponent(count);
+    window.location.href = url;
+  });
+});
+</script>
+{% endblock %}

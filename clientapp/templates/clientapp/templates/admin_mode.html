@@ -1,0 +1,247 @@
+{% extends 'base.html' %}
+{% block content %}
+<style>
+    body { background-color: #222; color: #fff; }
+    .admin-container {
+        display: flex; height: 100vh;
+    }
+    
+    /* 왼쪽: 미리보기 영역 */
+    .preview-area {
+        flex: 2;
+        background: #111;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    #canvas-wrap {
+        position: relative;
+        box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    }
+    
+    .slot-box {
+        position: absolute;
+        border: 2px solid red;
+        background: rgba(255, 0, 0, 0.2);
+        cursor: grab;
+        display: flex; align-items: center; justify-content: center;
+        color: white; font-weight: bold; font-size: 24px;
+    }
+    .frame-img {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        pointer-events: none; z-index: 10;
+    }
+
+    /* 오른쪽: 컨트롤 패널 */
+    .control-panel {
+        flex: 1;
+        background: #333;
+        padding: 20px;
+        overflow-y: auto;
+        box-shadow: -5px 0 10px rgba(0,0,0,0.3);
+    }
+
+    .control-group {
+        background: #444;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+    .control-group h3 { margin-top: 0; border-bottom: 1px solid #555; padding-bottom: 10px; }
+
+    label { display: block; margin-bottom: 5px; font-weight: bold; }
+    input[type="number"], select {
+        width: 100%; padding: 8px; margin-bottom: 10px;
+        background: #555; border: 1px solid #666; color: white; border-radius: 4px;
+    }
+    button {
+        width: 100%; padding: 10px; cursor: pointer;
+        border: none; border-radius: 5px; font-weight: bold; transition: 0.2s;
+    }
+    .btn-save { background: #00d1b2; color: white; }
+    .btn-save:hover { background: #00c4a7; }
+    .btn-blue { background: #3273dc; color: white; margin-top: 10px; }
+</style>
+
+<div class="admin-container">
+    
+    <div class="preview-area">
+        <div id="canvas-wrap">
+            <div id="slots-layer"></div>
+            <img src="{{ frame_url }}" class="frame-img">
+        </div>
+        <p style="margin-top: 10px; color: #888;">드래그하여 위치 이동, 컨트롤 패널에서 크기 조절</p>
+    </div>
+
+    <div class="control-panel">
+        <h2>⚙️ 관리자 모드</h2>
+        <button onclick="location.href='/'" style="background:#666; margin-bottom:20px;">🏠 메인으로</button>
+
+        <div class="control-group">
+            <h3>테마 선택</h3>
+            <form method="get">
+                <label>모드 (Mode)</label>
+                <select name="mode" onchange="this.form.submit()">
+                    {% for m in modes %}
+                    <option value="{{ m }}" {% if mode == m %}selected{% endif %}>{{ m }}</option>
+                    {% endfor %}
+                </select>
+                
+                <label>테마 (Theme)</label>
+                <select name="theme" onchange="this.form.submit()">
+                    {% for t in themes %}
+                    <option value="{{ t }}" {% if theme == t %}selected{% endif %}>{{ t }}</option>
+                    {% endfor %}
+                </select>
+            </form>
+        </div>
+
+        <div class="control-group">
+            <h3>📸 사진 좌표(Slots) 설정</h3>
+            <div id="slot-controls"></div>
+            
+            <label>촬영 간격 (ms)</label>
+            <input type="number" id="captureDelay" value="{{ capture_delay_ms }}">
+            
+            <button class="btn-save" onclick="saveSlots()">좌표 및 간격 저장</button>
+        </div>
+
+        <div class="control-group" style="border: 2px solid #00d1b2;">
+            <h3 style="color:#00d1b2;">🖨️ 글로벌 설정</h3>
+            <p style="font-size:12px; color:#ccc; margin-bottom:15px;">모든 테마에 공통으로 적용됩니다.</p>
+
+            <div style="display:flex; align-items:center; margin-bottom:15px;">
+                <input type="checkbox" id="printerToggle" style="width:20px; height:20px; margin:0 10px 0 0;" 
+                       {% if global_settings.printer_enabled %}checked{% endif %}>
+                <label style="margin:0; cursor:pointer;" for="printerToggle">프린터 사용 (ON/OFF)</label>
+            </div>
+            
+            <label>인쇄 화면 유지 시간 (초)</label>
+            <input type="number" id="printDuration" value="{{ global_settings.print_duration_sec }}" placeholder="예: 60">
+            <p style="font-size:12px; color:#aaa;">* CP1500 인쇄 속도(약 50초)를 고려해 설정하세요.</p>
+
+            <button class="btn-blue" onclick="saveGlobalSettings()">글로벌 설정 저장</button>
+        </div>
+
+    </div>
+</div>
+
+<script>
+// 데이터 로드
+const meta = {{ meta_json|safe }};
+const initialSlots = meta.slots || [];
+const canvasW = meta.canvas.width || 1000;
+const canvasH = meta.canvas.height || 1500;
+
+// 화면 비율 계산 (높이 800px 기준)
+const viewH = 800;
+const scale = viewH / canvasH;
+const viewW = canvasW * scale;
+
+const wrap = document.getElementById('canvas-wrap');
+const slotsLayer = document.getElementById('slots-layer');
+const controlsDiv = document.getElementById('slot-controls');
+
+// 초기화
+wrap.style.width = viewW + 'px';
+wrap.style.height = viewH + 'px';
+
+// 슬롯 렌더링
+let currentSlots = JSON.parse(JSON.stringify(initialSlots));
+
+function renderSlots() {
+    slotsLayer.innerHTML = '';
+    controlsDiv.innerHTML = '';
+
+    currentSlots.forEach((slot, idx) => {
+        // 1. 화면에 박스 그리기
+        const div = document.createElement('div');
+        div.className = 'slot-box';
+        div.innerText = idx + 1;
+        div.style.left = (slot.x * scale) + 'px';
+        div.style.top = (slot.y * scale) + 'px';
+        div.style.width = (slot.w * scale) + 'px';
+        div.style.height = (slot.h * scale) + 'px';
+        
+        // 간단한 드래그 로직 (생략 가능하나 편의상 유지)
+        // ... (드래그 구현 생략, 입력값으로 제어 권장)
+
+        slotsLayer.appendChild(div);
+
+        // 2. 컨트롤 패널에 입력창 만들기
+        const row = document.createElement('div');
+        row.style.marginBottom = '10px';
+        row.style.borderBottom = '1px dashed #555';
+        row.innerHTML = `
+            <div style="font-weight:bold; color:#00d1b2;">Slot ${idx+1}</div>
+            <div style="display:flex; gap:5px;">
+                <input type="number" value="${slot.x}" onchange="updateSlot(${idx}, 'x', this.value)" placeholder="X">
+                <input type="number" value="${slot.y}" onchange="updateSlot(${idx}, 'y', this.value)" placeholder="Y">
+            </div>
+            <div style="display:flex; gap:5px;">
+                <input type="number" value="${slot.w}" onchange="updateSlot(${idx}, 'w', this.value)" placeholder="W">
+                <input type="number" value="${slot.h}" onchange="updateSlot(${idx}, 'h', this.value)" placeholder="H">
+            </div>
+        `;
+        controlsDiv.appendChild(row);
+    });
+}
+
+function updateSlot(idx, key, val) {
+    currentSlots[idx][key] = parseInt(val);
+    renderSlots(); // 화면 갱신
+}
+
+// [기존] 슬롯 저장
+function saveSlots() {
+    const delay = document.getElementById('captureDelay').value;
+    
+    fetch("{% url 'admin_save_slots' %}", {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            'mode': '{{ mode }}',
+            'theme': '{{ theme }}',
+            'slots': currentSlots,
+            'capture_delay_ms': delay
+        })
+    })
+    .then(r => r.json())
+    .then(d => {
+        if(d.saved) alert("✅ 좌표 저장이 완료되었습니다.");
+        else alert("저장 실패: " + d.error);
+    });
+}
+
+// [신규] 글로벌 설정 저장
+function saveGlobalSettings() {
+    const printerEnabled = document.getElementById('printerToggle').checked;
+    const duration = document.getElementById('printDuration').value;
+
+    fetch("{% url 'admin_save_slots' %}", {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            'action': 'save_global_settings', // views.py에서 구분하는 키
+            'printer_enabled': printerEnabled,
+            'print_duration_sec': duration
+        })
+    })
+    .then(r => r.json())
+    .then(d => {
+        if(d.saved) alert("✅ 글로벌 설정이 저장되었습니다.");
+        else alert("설정 저장 실패");
+    });
+}
+
+renderSlots();
+</script>
+{% endblock %}
