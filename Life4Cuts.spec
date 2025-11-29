@@ -1,21 +1,51 @@
 # -*- mode: python ; coding: utf-8 -*-
+import sys
+import os
+from PyInstaller.utils.hooks import collect_all
 
 block_cipher = None
+
+# [1] Hidden Imports
+hiddenimports = [
+    'PIL', 
+    'PIL.Image',
+    'clientapp',
+    'clientapp.apps',
+    'clientapp.urls',
+    'clientapp.views',
+    'main',
+    'main.settings',
+    'main.urls',
+    'main.wsgi',
+    'django.contrib.admin.apps',
+    'django.contrib.auth.apps',
+    'django.contrib.contenttypes.apps',
+    'django.contrib.messages.apps',
+    'django.contrib.staticfiles.apps',
+    'django.contrib.sessions.apps',
+    'django.core.management',
+]
+
+datas = []
+binaries = []
+
+# [2] 내장할 파일 (templates, db)
+added_files = [
+    ('clientapp/templates', 'clientapp/templates'),
+    ('db.sqlite3', '.'), 
+]
+datas += added_files
 
 a = Analysis(
     ['run_app.py'],
     pathex=[],
-    binaries=[],
-    datas=[
-        # 템플릿과 스태틱 파일을 EXE 안에 포함
-        ('clientapp/templates', 'clientapp/templates'),
-        ('clientapp/static', 'clientapp/static'),
-    ],
-    hiddenimports=[],
+    binaries=binaries,
+    datas=datas,
+    hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=[], 
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
@@ -33,37 +63,29 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False, # 터미널 창 숨기기
+    console=False, 
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
-    entitlements_file=None,
+    
+    # [핵심 수정] 권한 설정 파일 연결 (이게 없으면 매번 물어봅니다)
+    entitlements_file='entitlements.plist', 
 )
 
-coll = COLLECT(
+app = BUNDLE(
     exe,
     a.binaries,
     a.zipfiles,
     a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    name='Life4Cut',
-)
-
-# ★ [중요] Mac 앱 권한 설정 ★
-app = BUNDLE(
-    coll,
     name='Life4Cut.app',
-    icon=None,
-    bundle_identifier='com.chanyp12.life4cut',
+    # [핵심 수정] 아이콘 파일 연결
+    icon='life4cuts_icon.icns', 
+    bundle_identifier='com.life4cut.webcam',
     info_plist={
-        'NSCameraUsageDescription': '사진 촬영을 위해 카메라 접근이 필요합니다.',
-        'NSMicrophoneUsageDescription': '영상 녹화를 위해 마이크 접근이 필요합니다.',
+        'NSCameraUsageDescription': 'Camera Access Required',
+        'NSMicrophoneUsageDescription': 'Microphone Access Required',
         'NSHighResolutionCapable': 'True',
-        'NSAppTransportSecurity': {
-            'NSAllowsArbitraryLoads': True # 로컬호스트 HTTP 허용
-        }
+        'LSBackgroundOnly': 'False'
     },
 )

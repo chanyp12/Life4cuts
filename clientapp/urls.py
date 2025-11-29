@@ -21,6 +21,8 @@ urlpatterns = [
     path('photo-admin/save-slots', views.admin_save_slots, name='admin_save_slots'),
 
     path('printing', views.printing, name='printing'),
+    path('print_action/', views.print_action, name='print_action'),
+    
 ]
 
 # [핵심 수정] Static, Media, Temp 폴더 서빙 설정

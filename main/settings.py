@@ -1,37 +1,18 @@
+from pathlib import Path
 import os
 import sys
-from pathlib import Path
-from dotenv import load_dotenv
 
-load_dotenv()
-
-# ------------------------------------------------------------------
-# [핵심 1] PyInstaller 및 경로 설정
-# ------------------------------------------------------------------
+# [경로 설정]
 if getattr(sys, 'frozen', False):
-    # 1. 읽기 전용 (EXE 내부)
-    BASE_DIR = Path(sys._MEIPASS)
-    
-    # 2. 실행 파일 위치
-    if sys.platform == 'darwin' and '.app' in sys.executable:
-        EXEC_DIR = Path(sys.executable).parent.parent.parent.parent
-    else:
-        EXEC_DIR = Path(sys.executable).parent
-    
-    # 3. [수정] 데이터 저장 경로를 실행 파일 옆 'Data' 폴더로 변경
-    # (사용자가 직관적으로 파일을 찾을 수 있게 함)
-    DATA_DIR = EXEC_DIR / 'Data'
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    # 외부 폴더 (static 등)
+    BASE_DIR = Path(sys.executable).parent.parent.parent.parent
+    # 내부 폴더 (templates 등)
+    EXEC_DIR = Path(sys.executable).parent
 else:
-    # 개발 환경
     BASE_DIR = Path(__file__).resolve().parent.parent
     EXEC_DIR = BASE_DIR
-    DATA_DIR = BASE_DIR
 
-# ------------------------------------------------------------------
-# 기본 Django 설정
-# ------------------------------------------------------------------
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-key-dev')
+SECRET_KEY = 'django-insecure-YOUR-SECRET-KEY'
 DEBUG = True 
 ALLOWED_HOSTS = ['*']
 
@@ -42,7 +23,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'clientapp', 
+    'clientapp',
     'main',
 ]
 
@@ -58,10 +39,14 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'main.urls'
 
+# [핵심] 템플릿 경로 (내부 + 외부 모두 확인)
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / 'templates'], 
+        'DIRS': [
+            EXEC_DIR / 'clientapp' / 'templates',
+            BASE_DIR / 'clientapp' / 'templates',
+        ],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -79,47 +64,25 @@ WSGI_APPLICATION = 'main.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': DATA_DIR / 'db.sqlite3', 
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
 
-# ------------------------------------------------------------------
-# Static Files
-# ------------------------------------------------------------------
-STATIC_URL = 'static/'
-if getattr(sys, 'frozen', False):
-    STATICFILES_DIRS = [EXEC_DIR / 'static']
-else:
-    STATICFILES_DIRS = [BASE_DIR / 'static']
-STATIC_ROOT = BASE_DIR / 'staticfiles'
+AUTH_PASSWORD_VALIDATORS = [
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+]
 
-FRAMES_DIR = EXEC_DIR / 'static' / 'frames'
-BACKGROUND_DIR = EXEC_DIR / 'static' / 'background'
-STICKERS_DIR = EXEC_DIR / 'static' / 'stickers'
-
-CAPTURE_DELAY_MS = 5000
-
-# ------------------------------------------------------------------
-# Media & Temp Files
-# ------------------------------------------------------------------
-MEDIA_URL = '/media/'
-MEDIA_ROOT = DATA_DIR / 'media'
-
-# Temp 경로 설정
-TEMP_URL = '/temp/'
-TEMP_ROOT = DATA_DIR / 'temp'
-
-try:
-    MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
-    TEMP_ROOT.mkdir(parents=True, exist_ok=True)
-except Exception as e:
-    print(f"Folder creation failed: {e}")
-
-# ------------------------------------------------------------------
-# 기타
-# ------------------------------------------------------------------
 LANGUAGE_CODE = 'ko-kr'
 TIME_ZONE = 'Asia/Seoul'
 USE_I18N = True
 USE_TZ = True
+
+# [정적/미디어 파일] 외부 폴더 연결
+STATIC_URL = 'static/'
+STATICFILES_DIRS = [ BASE_DIR / 'static' ]
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

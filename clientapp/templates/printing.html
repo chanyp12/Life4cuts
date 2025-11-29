@@ -1,169 +1,144 @@
 {% extends 'base.html' %}
+{% load static %}
 {% block content %}
 <style>
-  .printing-page{
-    width: 100%; height: 100%; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; background: #111; color: #fff; overflow: hidden;
+  .printing-page {
+    width: 100vw; height: 100vh;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    background: #000; color: #fff; overflow: hidden;
   }
-  .header-area { text-align: center; margin-bottom: 20px; z-index: 100; }
-  .header-area h1 { margin: 0; font-size: 28px; color: #00d1b2; }
-  .header-area p { margin: 5px 0 0; font-size: 14px; color: #aaa; }
-
-  /* 무빙 포토 컨테이너 */
+  .header-area { text-align: center; margin-bottom: 30px; z-index: 100; }
+  .header-area h1 { margin: 0; font-size: 32px; color: #00d1b2; }
+  
   #moving-photo-wrap {
     position: relative; 
-    box-shadow: 0 0 50px rgba(0,0,0,0.8);
-    background: #000;
-    opacity: 0; transition: opacity 0.5s;
+    box-shadow: 0 0 50px rgba(255, 255, 255, 0.1);
+    background: #333; overflow: hidden;
   }
 
-  /* === 레이어 순서 정의 (Z-Index) === */
-
-  /* 1층: 테마 프레임 (배경) */
-  .layer-frame {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    z-index: 1; /* 맨 아래 */
-  }
+  /* 1. 프레임 (배경) */
+  .layer-frame { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
   .layer-frame img { width: 100%; height: 100%; object-fit: fill; display: block; }
 
-  /* 2층: 동영상 (프레임 위에 올라감) */
-  .layer-video {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    z-index: 10; pointer-events: none;
+  /* 2. 동영상 (중간) */
+  #videoLayer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 5; }
+  
+  .slot-vid { 
+      position: absolute; object-fit: cover; background: #000; 
+      /* 기본적으로 정방향 (반전 없음) */
+      transform: none; 
   }
-  .slot-vid {
-    position: absolute;
-    object-fit: cover;
-    transform: scaleX(-1); /* 거울 모드 */
-    background: #000;
-  }
+  
+  /* [핵심] 거울모드 활성화 시 좌우 반전 */
+  .slot-vid.mirror-active { transform: scaleX(-1); }
 
-  /* 3층: 레이아웃 (말풍선 등 - 동영상 위에 올라감) */
-  .layer-layout {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    z-index: 20; pointer-events: none;
-  }
-  .layer-layout img { width: 100%; height: 100%; object-fit: fill; display: block; opacity: 0.9; }
-
-  /* 4층: 스티커 (맨 위) */
-  .layer-sticker {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    z-index: 30; pointer-events: none;
-  }
+  /* 3. 레이아웃 (테두리) */
+  .layer-layout { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; }
+  .layer-layout img { width: 100%; height: 100%; object-fit: fill; display: block; }
+  
+  /* 4. 스티커 (맨 위) */
+  #stickerLayer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 20; pointer-events: none; }
   .sticker-item { position: absolute; display: block; }
 
-  /* 로딩 애니메이션 */
-  .loading-dots { display: flex; gap: 8px; margin-top: 20px; }
-  .dot { width: 10px; height: 10px; background: #555; border-radius: 50%; animation: blink 1s infinite alternate; }
-  .dot:nth-child(2) { animation-delay: 0.2s; }
-  .dot:nth-child(3) { animation-delay: 0.4s; }
-  @keyframes blink { to { opacity: 0.3; transform: translateY(5px); } }
+  .home-btn { margin-top: 30px; padding: 10px 20px; background: #333; color: #fff; border: 1px solid #555; opacity: 0; transition: opacity 1s; cursor: pointer; }
 </style>
 
 <div class="printing-page">
   <div class="header-area">
     <h1>인쇄 중입니다...</h1>
-    <p>잠시만 기다려 주세요.</p>
+    <p>사진이 출력되는 동안 화면을 감상해주세요.</p>
   </div>
 
   <div id="moving-photo-wrap">
     <div class="layer-frame">
-      <img src="{{ frame_url }}" alt="frame" onerror="console.error('프레임 로드 실패')">
+      <img src="{{ frame_url }}" alt="frame">
     </div>
-
-    <div id="videoLayer" class="layer-video"></div>
-
+    <div id="videoLayer"></div>
     <div class="layer-layout">
       <img src="{{ layout_url }}" alt="layout" onerror="this.style.display='none'">
     </div>
-    
-    <div id="stickerLayer" class="layer-sticker"></div>
+    <div id="stickerLayer"></div>
   </div>
-
-  <div class="loading-dots">
-    <div class="dot"></div><div class="dot"></div><div class="dot"></div>
-  </div>
+  
+  <button class="home-btn" id="manualHomeBtn" onclick="goHome()">처음으로</button>
 </div>
 
 <script>
 const meta = {{ meta_json|safe }};
 const stickers = {{ stickers_json|safe }};
 const videoUrls = {{ mapped_videos_json|safe }};
-const mode = "{{ mode }}";
-const theme = "{{ theme }}";
+const printDurationSec = {{ print_duration|default:60 }}; 
+const isMirrorMode = {{ mirror_mode|yesno:"true,false" }}; // [핵심] 거울모드 값 확인
 
 const container = document.getElementById('moving-photo-wrap');
 const videoLayer = document.getElementById('videoLayer');
 const stickerLayer = document.getElementById('stickerLayer');
 
-// 디버깅 로그
-console.log("Videos:", videoUrls);
-
-function getStickerPath(id) {
-    return `/static/frames/stickers/${id}.png`;
-}
-
 function init(){
   if(!meta || !meta.canvas) return;
-
+  
   const cw = meta.canvas.width;
   const ch = meta.canvas.height;
-  const maxHeight = window.innerHeight * 0.65;
+  const maxHeight = window.innerHeight * 0.70; 
   const scale = maxHeight / ch;
   
-  const finalW = cw * scale;
-  const finalH = ch * scale;
+  container.style.width = (cw * scale) + 'px';
+  container.style.height = (ch * scale) + 'px';
 
-  container.style.width = finalW + 'px';
-  container.style.height = finalH + 'px';
-
-  // 1. 비디오 배치
   const slots = meta.slots || [];
-  slots.forEach((slot, idx)=>{
+  slots.forEach((slot, idx) => {
     const url = videoUrls[idx];
     if(url){
       const v = document.createElement('video');
       v.src = url; 
       v.className = 'slot-vid';
-      // 자동재생 필수
-      v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true;
       
-      // 위치 잡기
+      // [핵심] 거울모드일 경우에만 반전 클래스 추가
+      if (isMirrorMode) {
+          v.classList.add('mirror-active');
+      }
+
+      v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true;
       v.style.left = (slot.x * scale) + 'px';
       v.style.top = (slot.y * scale) + 'px';
       v.style.width = (slot.w * scale) + 'px';
       v.style.height = (slot.h * scale) + 'px';
       
-      // 에러 처리
-      v.onerror = () => console.error("비디오 로드 실패:", url);
-      
       videoLayer.appendChild(v);
+      v.play().catch(e => console.log(e));
     }
   });
 
-  // 2. 스티커 배치
-  stickers.forEach(st => {
-    const img = document.createElement('img');
-    img.className = 'sticker-item';
-    img.src = getStickerPath(st.id);
-    
-    img.style.left = (st.x * scale) + 'px';
-    img.style.top = (st.y * scale) + 'px';
-    img.style.width = (st.w * scale) + 'px';
-    img.style.height = (st.h * scale) + 'px';
-    img.style.transform = `rotate(${st.angle}deg)`;
-    
-    stickerLayer.appendChild(img);
-  });
-
-  container.style.opacity = 1;
+  if(stickers) {
+      stickers.forEach(st => {
+        const img = document.createElement('img');
+        img.className = 'sticker-item';
+        img.src = `/static/frames/stickers/${st.id}.png`;
+        img.style.left = (st.x * scale) + 'px';
+        img.style.top = (st.y * scale) + 'px';
+        img.style.width = (st.w * scale) + 'px';
+        img.style.height = (st.h * scale) + 'px';
+        img.style.transform = `rotate(${st.angle}deg)`;
+        stickerLayer.appendChild(img);
+      });
+  }
+  
+  triggerServerPrint();
 }
 
-window.addEventListener('load', init);
-window.addEventListener('resize', init);
+function triggerServerPrint() {
+    fetch("{% url 'print_action' %}", {
+        method: 'POST',
+        headers: {'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/json'},
+        body: JSON.stringify({'action': 'print_now'})
+    });
+}
 
-setTimeout(()=>{
-  window.location.href = "{% url 'startpage' %}";
-}, 12000); // 영상 감상 시간 12초
+function goHome() { window.location.href = "{% url 'startpage' %}"; }
+
+window.addEventListener('load', init);
+setTimeout(goHome, printDurationSec * 1000); 
+setTimeout(()=>{ document.getElementById('manualHomeBtn').style.opacity = 1; }, 5000);
 </script>
 {% endblock %}

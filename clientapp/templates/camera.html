@@ -1,156 +1,34 @@
 {% extends 'base.html' %}
+{% load static %}
 {% block content %}
 <style>
-  /* 전체 화면 레이아웃 (검은 배경, 여백 없음) */
-  .camera-page {
-    position: fixed;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background-color: #000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-  }
-
-  /* 뷰파인더 컨테이너: 화면 꽉 채우기 */
-  #viewContainer {
-    width: 100vw;
-    height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-  }
+  .camera-page { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: #000; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  #viewContainer { width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; position: relative; }
+  #view { position: relative; width: auto; height: auto; max-width: 100%; max-height: 100%; aspect-ratio: {{ guide_ratio|floatformat:5 }}; overflow: hidden; box-shadow: 0 0 50px rgba(0,0,0,0.8); background: #000; }
   
-  /* 실제 비디오 영역 */
-  #view {
-    position: relative;
-    width: auto;
-    height: auto;
-    max-width: 100%;
-    max-height: 100%;
-    aspect-ratio: {{ guide_ratio|floatformat:5 }};
-    overflow: hidden;
-    box-shadow: 0 0 50px rgba(0,0,0,0.8);
-    background: #000;
-  }
-
-  #video {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    transform: scaleX(-1); /* 거울 모드 */
-    display: block;
-  }
-
-  /* 상단 정보 오버레이 */
-  .overlay-info {
-    position: absolute;
-    top: 20px;
-    left: 0; 
-    width: 100%;
-    text-align: center;
-    z-index: 10;
-    pointer-events: none;
-  }
-  .overlay-badge {
-    background: rgba(0, 0, 0, 0.5);
-    color: #fff;
-    padding: 8px 16px;
-    border-radius: 20px;
-    font-size: 15px;
-    font-weight: bold;
-    border: 1px solid rgba(255,255,255,0.2);
-    backdrop-filter: blur(4px);
-  }
-
-  /* 우측 하단 원형 카운트다운 */
-  #countdown-circle {
-    position: absolute;
-    bottom: 30px;
-    right: 30px;
-    width: 70px;
-    height: 70px;
-    border-radius: 50%;
-    background: rgba(0, 0, 0, 0.6);
-    border: 4px solid #ffd54f;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 20;
-    opacity: 0; 
-    transform: scale(0.8);
-    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  }
+  #video { width: 100%; height: 100%; object-fit: cover; transform: none; display: block; }
+  #video.mirror-active { transform: scaleX(-1); }
   
-  #countdown-number {
-    color: #fff;
-    font-size: 32px;
-    font-weight: 800;
-    font-family: sans-serif;
-  }
-
-  #countdown-circle.active {
-    opacity: 1;
-    transform: scale(1);
-    animation: pulse 1s infinite;
-  }
-
-  @keyframes pulse {
-    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 213, 79, 0.7); }
-    70% { transform: scale(1.05); box-shadow: 0 0 0 15px rgba(255, 213, 79, 0); }
-    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 213, 79, 0); }
-  }
-
-  /* 플래시 효과 */
-  #flash {
-    position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: #fff;
-    opacity: 0;
-    pointer-events: none;
-    z-index: 30;
-    transition: opacity 0.15s ease-out;
-  }
-  #flash.active {
-    opacity: 1;
-    transition: none;
-  }
-
-  /* 하단 상태 메시지 */
-  #status-msg {
-    position: absolute;
-    bottom: 40px;
-    left: 50%;
-    transform: translateX(-50%);
-    color: #fff;
-    font-size: 18px;
-    font-weight: 500;
-    text-shadow: 0 2px 8px rgba(0,0,0,0.8);
-    opacity: 0.9;
-    z-index: 10;
-  }
+  .top-badge { position: absolute; top: 40px; left: 50%; transform: translateX(-50%); padding: 10px 25px; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(5px); color: #00d1b2; font-size: 24px; font-weight: bold; border-radius: 50px; z-index: 10; border: 2px solid #00d1b2; text-align: center; pointer-events: none; }
+  #countdown-circle { position: absolute; bottom: 30px; right: 30px; width: 70px; height: 70px; border-radius: 50%; background: rgba(0, 0, 0, 0.6); border: 4px solid #ffd54f; display: flex; align-items: center; justify-content: center; z-index: 20; opacity: 0; transform: scale(0.8); transition: all 0.3s; }
+  #countdown-number { color: #fff; font-size: 32px; font-weight: 800; font-family: sans-serif; }
+  #countdown-circle.active { opacity: 1; transform: scale(1); animation: pulse 1s infinite; }
+  @keyframes pulse { 0% { transform: scale(1); } 70% { transform: scale(1.05); } 100% { transform: scale(1); } }
+  #flash { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 30; transition: opacity 0.15s ease-out; }
+  #flash.active { opacity: 1; transition: none; }
+  #status-msg { position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); color: #fff; font-size: 18px; font-weight: 500; text-shadow: 0 2px 8px rgba(0,0,0,0.8); opacity: 0.9; z-index: 10; }
 </style>
 
 <div class="camera-page">
   <div id="viewContainer">
-    <div class="overlay-info">
-      <span class="overlay-badge" id="info-badge">{{ count }}컷 모드 / {{ theme }}</span>
-    </div>
-
+    <div class="top-badge" id="info-badge"><span id="current-shot-num">0</span> / {{ count }}</div>
     <div id="view">
       <video id="video" autoplay playsinline muted></video>
-      
-      <div id="countdown-circle">
-        <span id="countdown-number"></span>
-      </div>
-
+      <div id="countdown-circle"><span id="countdown-number"></span></div>
       <div id="flash"></div>
     </div>
-
     <div id="status-msg">준비 중...</div>
   </div>
-
   <canvas id="canvas" style="display:none;"></canvas>
   <audio id="shutterSound" src="/static/sound/shutter.mp3" preload="auto"></audio>
 </div>
@@ -159,21 +37,21 @@
 const SLOT_RATIO = {{ guide_ratio|floatformat:5 }}; 
 const SHOT_TOTAL = {{ count }};
 const CAPTURE_DELAY_MS = {{ capture_delay_ms|default:5000 }};
+const isMirrorMode = {{ mirror_mode|yesno:"true,false" }};
 
 const video = document.getElementById('video');
 const canvas = document.getElementById('canvas');
 const countdownCircle = document.getElementById('countdown-circle');
 const countdownNum = document.getElementById('countdown-number');
 const statusMsg = document.getElementById('status-msg');
-const infoBadge = document.getElementById('info-badge');
+const currentShotNumEl = document.getElementById('current-shot-num');
 const flashEl = document.getElementById('flash');
 const shutterSound = document.getElementById('shutterSound');
 
-// [수정] 소리 재생 함수 개선 (복제 재생 방식)
+if (isMirrorMode) video.classList.add('mirror-active');
+
 function playShutter() {
     if (shutterSound) {
-        // 기존 오디오 요소를 직접 재생하면 연속 촬영 시 씹힐 수 있습니다.
-        // 노드를 복제(cloneNode)하여 재생하면 겹쳐서 소리가 나도 끊기지 않습니다.
         const sound = shutterSound.cloneNode();
         sound.volume = 1.0;
         sound.play().catch(e => console.log('Sound blocked:', e));
@@ -182,7 +60,6 @@ function playShutter() {
 
 let mediaRecorder;
 let recordedChunks = [];
-
 function getCookie(name){
   let value = `; ${document.cookie}`;
   let parts = value.split(`; ${name}=`);
@@ -192,39 +69,29 @@ const CSRF_TOKEN = getCookie('csrftoken');
 
 async function initCam(){
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    statusMsg.innerHTML = "🚨 <b>카메라 오류</b><br>카메라를 찾을 수 없습니다.";
-    statusMsg.style.color = "red";
+    statusMsg.innerHTML = "🚨 <b>카메라 오류</b>";
     return;
   }
-
   try{
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { width: { ideal: 1920 }, height: { ideal: 1080 }, facingMode: 'user' },
-      audio: false
+      audio: true
     });
     video.srcObject = stream;
-    
-    // 오디오 미리 로드
     if(shutterSound) shutterSound.load();
-
     await new Promise(r => video.onloadedmetadata = r);
     video.play();
     initMediaRecorder(stream);
-    
   } catch (e){
-    console.error(e);
     statusMsg.innerHTML = "🚨 <b>카메라 권한 거부됨</b>";
-    statusMsg.style.color = "#ff6b6b";
   }
 }
 
 function initMediaRecorder(stream) {
-  const mimeTypes = ['video/webm;codecs=vp9', 'video/webm', 'video/mp4'];
-  let selectedMimeType = mimeTypes.find(type => MediaRecorder.isTypeSupported(type)) || '';
-  if (!selectedMimeType) return;
-
-  try { mediaRecorder = new MediaRecorder(stream, { mimeType: selectedMimeType }); } catch (e) {}
-
+  const types = ['video/webm;codecs=vp9', 'video/webm', 'video/mp4'];
+  let mime = types.find(t => MediaRecorder.isTypeSupported(t)) || '';
+  try { mediaRecorder = new MediaRecorder(stream, { mimeType: mime }); } 
+  catch (e) { mediaRecorder = new MediaRecorder(stream); }
   mediaRecorder.ondataavailable = (event) => {
     if (event.data.size > 0) recordedChunks.push(event.data);
   };
@@ -256,7 +123,11 @@ async function waitMsWithCountdown(ms){
       const elapsed = now - start;
       const remain = Math.max(0, ms - elapsed);
       const s = Math.ceil(remain / 1000);
-      if (s > 0 && s <= 5) countdownNum.textContent = s; else countdownNum.textContent = '';
+      
+      // [수정] 0보다 크면 무조건 숫자를 보여줌 (6초 이상도 표시)
+      if (s > 0) countdownNum.textContent = s; 
+      else countdownNum.textContent = '';
+      
       if (remain <= 0) resolve(); else requestAnimationFrame(tick);
     }
     requestAnimationFrame(tick);
@@ -265,12 +136,9 @@ async function waitMsWithCountdown(ms){
 
 async function captureAndUpload(){
   const videoBlob = await stopRecording();
-  
-  // 찰칵 효과 및 소리
   flashEl.classList.add('active');
   setTimeout(() => flashEl.classList.remove('active'), 150);
   playShutter(); 
-  
   countdownCircle.classList.remove('active');
 
   const vw = video.videoWidth; const vh = video.videoHeight;
@@ -287,7 +155,11 @@ async function captureAndUpload(){
 
   canvas.width = cropW; canvas.height = cropH;
   const ctx = canvas.getContext('2d');
-  ctx.translate(cropW, 0); ctx.scale(-1, 1);
+  
+  if (isMirrorMode) {
+      ctx.translate(cropW, 0); ctx.scale(-1, 1);
+  }
+  
   ctx.drawImage(video, sx, sy, cropW, cropH, 0, 0, cropW, cropH);
   
   const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
@@ -312,36 +184,25 @@ async function captureAndUpload(){
 async function autoSequence(){
   await initCam();
   await new Promise(r => setTimeout(r, 1500));
-
   let taken = 0;
-  infoBadge.textContent = `0 / ${SHOT_TOTAL} | ${ '{{ theme }}' }`;
+  currentShotNumEl.textContent = '0';
 
   while (taken < SHOT_TOTAL){
     statusMsg.textContent = `촬영 준비`; statusMsg.style.color = '#fff';
-    infoBadge.textContent = `${taken + 1} / ${SHOT_TOTAL} | ${ '{{ theme }}' }`;
-    
+    currentShotNumEl.textContent = (taken + 1);
     await waitMsWithCountdown(CAPTURE_DELAY_MS);
-    
     statusMsg.textContent = '찰칵!';
     const result = await captureAndUpload();
-    
-    if (result.saved) {
-      taken = result.count;
-    } else {
-      statusMsg.textContent = '재시도...';
-      await new Promise(r=>setTimeout(r,1000)); continue;
-    }
-
+    if (result.saved) { taken = result.count; } 
+    else { statusMsg.textContent = '재시도...'; await new Promise(r=>setTimeout(r,1000)); continue; }
     if (taken < SHOT_TOTAL) {
       statusMsg.textContent = '다음 촬영 준비...'; statusMsg.style.color = '#ddd';
       await new Promise(r => setTimeout(r, 1500));
     }
   }
-
   statusMsg.textContent = '완료! 이동합니다.'; statusMsg.style.color = '#00d1b2';
   setTimeout(() => { window.location.href = "{% url 'preview' %}"; }, 1000);
 }
-
 autoSequence();
 </script>
 {% endblock %}

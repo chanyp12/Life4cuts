@@ -1,161 +1,85 @@
 {% extends 'base.html' %}
 {% block content %}
 <style>
-  /* [수정] 전체 화면 스크롤 방지 (양옆 스크롤 제거) */
+  /* 전체 화면 스크롤 방지 */
   html, body {
-    margin: 0;
-    padding: 0;
-    width: 100%;
-    height: 100%;
-    overflow: hidden; /* 브라우저 자체 스크롤바 숨김 */
-    background-color: #1a1a1a;
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden; background-color: #1a1a1a;
   }
 
   .preview-page {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    padding: 20px;
-    box-sizing: border-box;
-    background-color: #1a1a1a;
-    overflow: hidden; /* 내부 요소 튀어나감 방지 */
+    width: 100%; height: 100%; display: flex; flex-direction: column;
+    padding: 20px; box-sizing: border-box; background-color: #1a1a1a;
+    overflow: hidden;
   }
 
-  .preview-header {
-    flex: 0 0 auto;
-    margin-bottom: 15px;
-  }
+  .preview-header { flex: 0 0 auto; margin-bottom: 15px; }
   .preview-header h1 { margin: 0 0 5px 0; font-size: 24px; color: #fff; }
   .preview-header p { margin: 0; font-size: 14px; color: #aaa; }
 
   .preview-main {
-    flex: 1;
-    display: flex;
-    gap: 20px;
-    min-height: 0; /* Flex 자식의 overflow 처리를 위해 필수 */
-    overflow: hidden;
+    flex: 1; display: flex; gap: 20px; min-height: 0; overflow: hidden;
   }
 
   .thumbs {
-    flex: 0 0 260px;
-    overflow-y: auto; /* 썸네일 목록만 세로 스크롤 허용 */
-    padding-right: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+    flex: 0 0 260px; overflow-y: auto; padding-right: 10px;
+    display: flex; flex-direction: column; gap: 10px;
   }
-  
-  /* 썸네일 스크롤바 디자인 (선택 사항) */
   .thumbs::-webkit-scrollbar { width: 6px; }
   .thumbs::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
   .thumbs::-webkit-scrollbar-track { background: transparent; }
 
   .thumb {
-    width: 100%;
-    background: #000;
-    border-radius: 8px;
-    border: 2px solid #333;
-    cursor: pointer;
-    overflow: hidden;
-    flex-shrink: 0;
+    width: 100%; background: #000; border-radius: 8px; border: 2px solid #333;
+    cursor: pointer; overflow: hidden; flex-shrink: 0;
   }
-  .thumb img {
-    display: block;
-    width: 100%;
-    height: auto;
-  }
+  .thumb img { display: block; width: 100%; height: auto; }
   .thumb.selected { border-color: #ffd54f; }
 
   .frame-area {
-    flex: 1;
-    background: #000;
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    padding: 20px;
-    overflow: hidden; /* 이미지가 영역 밖으로 나가는 것 방지 */
+    flex: 1; background: #000; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    position: relative; padding: 20px; overflow: hidden;
   }
 
   #frameWrap {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
+    width: 100%; height: 100%; display: flex;
+    align-items: center; justify-content: center; position: relative;
   }
 
   #frameInner {
-    position: relative;
-    display: block; 
-    box-shadow: 0 0 30px rgba(0,0,0,0.5);
-    margin: 0 auto;
+    position: relative; display: block; 
+    box-shadow: 0 0 30px rgba(0,0,0,0.5); margin: 0 auto;
   }
 
-  #frameImg {
-    display: block;
-    width: 100%;
-    height: 100%;
-    object-fit: fill;
-  }
+  #frameImg { display: block; width: 100%; height: 100%; object-fit: fill; }
 
   #slotsOverlay {
-    position: absolute;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    z-index: 10;
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10;
   }
 
   #layoutImg {
-    position: absolute;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    object-fit: fill;
-    z-index: 20;
-    pointer-events: none;
-    opacity: 1.0;
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    object-fit: fill; z-index: 20; pointer-events: none; opacity: 1.0;
   }
 
   .slot-box {
-    position: absolute;
-    border: 1px dashed rgba(255, 255, 255, 0.5);
-    background-color: rgba(0, 209, 178, 0.1);
-    cursor: pointer;
-    background-size: cover;
-    background-position: center;
-    box-sizing: border-box;
-    transition: border 0.2s;
-    z-index: 10;
+    position: absolute; border: 1px dashed rgba(255, 255, 255, 0.5);
+    background-color: rgba(0, 209, 178, 0.1); cursor: pointer;
+    background-size: cover; background-position: center; box-sizing: border-box;
+    transition: border 0.2s; z-index: 10;
   }
-  .slot-box:hover {
-    background-color: rgba(0, 209, 178, 0.3);
-    border-color: #fff;
-  }
-  .slot-box.selected {
-    border: 3px solid #ffd54f;
-    z-index: 15;
-  }
+  .slot-box:hover { background-color: rgba(0, 209, 178, 0.3); border-color: #fff; }
+  .slot-box.selected { border: 3px solid #ffd54f; z-index: 15; }
 
   .preview-footer {
-    flex: 0 0 auto;
-    margin-top: 15px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    flex: 0 0 auto; margin-top: 15px;
+    display: flex; justify-content: space-between; align-items: center;
   }
   
   button {
-    padding: 10px 20px;
-    border-radius: 6px;
-    border: none;
-    cursor: pointer;
-    font-weight: bold;
-    background: #00d1b2;
-    color: white;
-    font-size: 14px;
+    padding: 10px 20px; border-radius: 6px; border: none; cursor: pointer;
+    font-weight: bold; background: #00d1b2; color: white; font-size: 14px;
   }
   button.secondary { background: #555; }
 </style>
@@ -173,9 +97,7 @@
       <div id="frameWrap">
         <div id="frameInner">
           <img id="frameImg" src="{{ frame_url }}" alt="frame">
-          
           <div id="slotsOverlay"></div>
-          
           {% if layout_url %}
             <img id="layoutImg" src="{{ layout_url }}" alt="layout">
           {% endif %}
@@ -206,7 +128,9 @@ const frameWrap = document.getElementById('frameWrap');
 const slots = meta.slots || [];
 const canvas = meta.canvas || {width:1, height:1};
 
+// [수정] 초기에는 모든 슬롯을 비워둠 (null)
 let mapping = new Array(slots.length).fill(null);
+
 window.mapping = mapping;
 let currentSlot = 0;
 
@@ -319,6 +243,14 @@ function getCookie(name){
 
 document.getElementById('btnDone').addEventListener('click', async ()=>{
   const statusEl = document.getElementById('status');
+  
+  // [유지] 유효성 검사: 사진이 하나라도 선택되었는지 확인
+  const hasImage = mapping.some(item => item !== null);
+  if (!hasImage) {
+      alert("⚠️ 사진을 최소 1장 이상 선택해주세요!");
+      return;
+  }
+
   statusEl.textContent = '저장 중...';
   
   try {
