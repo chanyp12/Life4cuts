@@ -1,86 +1,70 @@
 {% extends 'base.html' %}
 {% block content %}
 <style>
-  /* 전체 화면 스크롤 방지 */
-  html, body {
-    margin: 0; padding: 0; width: 100%; height: 100%;
-    overflow: hidden; background-color: #1a1a1a;
-  }
-
-  .preview-page {
-    width: 100%; height: 100%; display: flex; flex-direction: column;
-    padding: 20px; box-sizing: border-box; background-color: #1a1a1a;
-    overflow: hidden;
-  }
-
+  /* 전체 화면 설정 */
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #1a1a1a; }
+  .preview-page { width: 100%; height: 100%; display: flex; flex-direction: column; padding: 20px; box-sizing: border-box; }
+  
+  /* 상단 헤더 */
   .preview-header { flex: 0 0 auto; margin-bottom: 15px; }
   .preview-header h1 { margin: 0 0 5px 0; font-size: 24px; color: #fff; }
-  .preview-header p { margin: 0; font-size: 14px; color: #aaa; }
-
-  .preview-main {
-    flex: 1; display: flex; gap: 20px; min-height: 0; overflow: hidden;
-  }
-
-  .thumbs {
-    flex: 0 0 260px; overflow-y: auto; padding-right: 10px;
-    display: flex; flex-direction: column; gap: 10px;
-  }
-  .thumbs::-webkit-scrollbar { width: 6px; }
-  .thumbs::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
-  .thumbs::-webkit-scrollbar-track { background: transparent; }
-
-  .thumb {
-    width: 100%; background: #000; border-radius: 8px; border: 2px solid #333;
-    cursor: pointer; overflow: hidden; flex-shrink: 0;
-  }
+  
+  .preview-main { flex: 1; display: flex; gap: 20px; min-height: 0; overflow: hidden; }
+  
+  /* 왼쪽 썸네일 목록 */
+  .thumbs { flex: 0 0 260px; overflow-y: auto; padding-right: 10px; display: flex; flex-direction: column; gap: 10px; }
+  .thumb { width: 100%; background: #000; border-radius: 8px; border: 2px solid #333; cursor: pointer; }
   .thumb img { display: block; width: 100%; height: auto; }
-  .thumb.selected { border-color: #ffd54f; }
-
-  .frame-area {
-    flex: 1; background: #000; border-radius: 12px;
-    display: flex; align-items: center; justify-content: center;
-    position: relative; padding: 20px; overflow: hidden;
+  
+  /* 오른쪽 캔버스 영역 */
+  .frame-area { flex: 1; background: #000; border-radius: 12px; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  
+  #frameWrap { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; position: relative; }
+  
+  /* [핵심] 프레임 내부 레이어링 컨테이너 */
+  #frameInner { 
+      position: relative; display: block; 
+      box-shadow: 0 0 30px rgba(0,0,0,0.5); 
+      margin: 0 auto;
   }
 
-  #frameWrap {
-    width: 100%; height: 100%; display: flex;
-    align-items: center; justify-content: center; position: relative;
+  /* Layer 1: 배경 프레임 (맨 아래) */
+  #frameImg { 
+      display: block; width: 100%; height: 100%; object-fit: fill; 
+      position: relative; 
+      z-index: 1; 
+      pointer-events: none; 
   }
 
-  #frameInner {
-    position: relative; display: block; 
-    box-shadow: 0 0 30px rgba(0,0,0,0.5); margin: 0 auto;
-  }
-
-  #frameImg { display: block; width: 100%; height: 100%; object-fit: fill; }
-
+  /* Layer 2: 사진 슬롯 (중간) */
   #slotsOverlay {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10;
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+      z-index: 5; 
   }
 
+  /* Layer 3: 레이아웃 덮개 (맨 위) */
   #layoutImg {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    object-fit: fill; z-index: 20; pointer-events: none; opacity: 1.0;
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      object-fit: fill; 
+      z-index: 20; 
+      pointer-events: none; /* 클릭은 통과시켜서 아래 슬롯이 선택되게 함 */
+      opacity: 1.0;
   }
 
+  /* 개별 슬롯 박스 */
   .slot-box {
-    position: absolute; border: 1px dashed rgba(255, 255, 255, 0.5);
-    background-color: rgba(0, 209, 178, 0.1); cursor: pointer;
-    background-size: cover; background-position: center; box-sizing: border-box;
-    transition: border 0.2s; z-index: 10;
+      position: absolute; 
+      border: 1px dashed rgba(255, 255, 255, 0.3);
+      background-color: rgba(0, 209, 178, 0.1); 
+      cursor: pointer;
+      background-size: cover; background-position: center;
+      transition: border 0.2s; 
   }
-  .slot-box:hover { background-color: rgba(0, 209, 178, 0.3); border-color: #fff; }
+  .slot-box:hover { border-color: #fff; z-index: 15; }
   .slot-box.selected { border: 3px solid #ffd54f; z-index: 15; }
 
-  .preview-footer {
-    flex: 0 0 auto; margin-top: 15px;
-    display: flex; justify-content: space-between; align-items: center;
-  }
-  
-  button {
-    padding: 10px 20px; border-radius: 6px; border: none; cursor: pointer;
-    font-weight: bold; background: #00d1b2; color: white; font-size: 14px;
-  }
+  .preview-footer { flex: 0 0 auto; margin-top: 15px; display: flex; justify-content: space-between; align-items: center; }
+  button { padding: 10px 20px; border-radius: 6px; border: none; cursor: pointer; font-weight: bold; background: #00d1b2; color: white; }
   button.secondary { background: #555; }
 </style>
 
@@ -96,8 +80,10 @@
     <div class="frame-area">
       <div id="frameWrap">
         <div id="frameInner">
-          <img id="frameImg" src="{{ frame_url }}" alt="frame">
+          <img id="frameImg" src="{{ frame_url }}" alt="frame" onerror="alert('프레임 로드 실패')">
+          
           <div id="slotsOverlay"></div>
+          
           {% if layout_url %}
             <img id="layoutImg" src="{{ layout_url }}" alt="layout">
           {% endif %}
@@ -118,6 +104,8 @@
 <script>
 const captured = {{ captured_json|safe }};
 const meta = {{ meta_json|safe }};
+const slots = meta.slots || [];
+const canvas = meta.canvas || {width:1, height:1};
 
 const frameImg = document.getElementById('frameImg');
 const frameInner = document.getElementById('frameInner');
@@ -125,26 +113,26 @@ const slotsOverlay = document.getElementById('slotsOverlay');
 const thumbsEl = document.getElementById('thumbs');
 const frameWrap = document.getElementById('frameWrap');
 
-const slots = meta.slots || [];
-const canvas = meta.canvas || {width:1, height:1};
-
-// [수정] 초기에는 모든 슬롯을 비워둠 (null)
 let mapping = new Array(slots.length).fill(null);
-
 window.mapping = mapping;
 let currentSlot = 0;
 
+// 썸네일 렌더링
 function renderThumbs(){
   thumbsEl.innerHTML = '';
   captured.forEach((url, idx)=>{
     const div = document.createElement('div');
     div.className = 'thumb';
     div.innerHTML = `<img src="${url}" loading="lazy">`;
-    
     div.addEventListener('click', ()=>{
       if (currentSlot === null && slots.length > 0) currentSlot = 0;
       if (currentSlot !== null) {
         mapping[currentSlot] = url;
+        renderSlots();
+        // 다음 빈 슬롯 자동 선택
+        let next = -1;
+        for(let i=0; i<slots.length; i++) if(!mapping[i]) { next=i; break; }
+        if(next !== -1) currentSlot = next;
         renderSlots();
       }
     });
@@ -152,6 +140,7 @@ function renderThumbs(){
   });
 }
 
+// 슬롯 렌더링 (반응형 리사이즈 적용)
 function renderSlots(){
   slotsOverlay.innerHTML = '';
   if (!frameImg || !frameInner || !frameWrap) return;
@@ -174,56 +163,41 @@ function renderSlots(){
 
   const baseW = (canvas && canvas.width) ? canvas.width : natW;
   const baseH = (canvas && canvas.height) ? canvas.height : natH;
-
   const scaleX = finalW / baseW;
   const scaleY = finalH / baseH;
 
   slots.forEach((s, idx)=>{
     const div = document.createElement('div');
     div.className = 'slot-box';
-    
     div.style.left   = (s.x * scaleX) + 'px';
     div.style.top    = (s.y * scaleY) + 'px';
     div.style.width  = (s.w * scaleX) + 'px';
     div.style.height = (s.h * scaleY) + 'px';
 
-    if (mapping[idx]){
-      div.style.backgroundImage = `url(${mapping[idx]})`;
-    } else {
-      div.style.backgroundImage = 'none';
-    }
+    if (mapping[idx]) div.style.backgroundImage = `url(${mapping[idx]})`;
+    else div.style.backgroundImage = 'none';
 
-    if (idx === currentSlot){
-      div.classList.add('selected');
-    }
+    if (idx === currentSlot) div.classList.add('selected');
 
     div.addEventListener('click', (e)=>{
       e.stopPropagation();
       currentSlot = idx;
       renderSlots();
     });
-
     slotsOverlay.appendChild(div);
   });
 }
 
+// 이미지 로드 완료 시 초기화
 if (frameImg.complete && frameImg.naturalHeight !== 0) {
-  renderThumbs();
-  renderSlots();
+  renderThumbs(); renderSlots();
 } else {
-  frameImg.onload = () => {
-    renderThumbs();
-    renderSlots();
-  };
+  frameImg.onload = () => { renderThumbs(); renderSlots(); };
 }
-
 window.addEventListener('resize', renderSlots);
 
 document.getElementById('btnClearSlot').addEventListener('click', ()=>{
-  if (currentSlot !== null) {
-    mapping[currentSlot] = null;
-    renderSlots();
-  }
+  if (currentSlot !== null) { mapping[currentSlot] = null; renderSlots(); }
 });
 
 function getCookie(name){
@@ -243,35 +217,20 @@ function getCookie(name){
 
 document.getElementById('btnDone').addEventListener('click', async ()=>{
   const statusEl = document.getElementById('status');
-  
-  // [유지] 유효성 검사: 사진이 하나라도 선택되었는지 확인
   const hasImage = mapping.some(item => item !== null);
-  if (!hasImage) {
-      alert("⚠️ 사진을 최소 1장 이상 선택해주세요!");
-      return;
-  }
+  if (!hasImage) { alert("⚠️ 사진을 최소 1장 이상 선택해주세요!"); return; }
 
   statusEl.textContent = '저장 중...';
-  
   try {
     const res = await fetch("{% url 'prepare_decorate' %}", {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRFToken': getCookie('csrftoken')
-      },
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
       body: JSON.stringify({ mapping })
     });
     const js = await res.json();
-    if (res.ok && js.ok) {
-      window.location.href = "{% url 'decorate' %}";
-    } else {
-      statusEl.textContent = '오류: ' + (js.error || 'Unknown');
-    }
-  } catch(e) {
-    console.error(e);
-    statusEl.textContent = '네트워크 오류';
-  }
+    if (res.ok && js.ok) window.location.href = "{% url 'decorate' %}";
+    else statusEl.textContent = '오류: ' + (js.error || 'Unknown');
+  } catch(e) { console.error(e); statusEl.textContent = '네트워크 오류'; }
 });
 </script>
 {% endblock %}

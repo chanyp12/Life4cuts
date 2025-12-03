@@ -110,22 +110,49 @@ def _clear_session_data(request):
     request.session['captured_videos'] = []
     request.session.modified = True
 
-# 인쇄용 이미지 생성
+# [핵심] 인쇄용 이미지 생성 (CP1500 최적화)
 def create_print_layout(source_path, save_path, mode):
     try:
         img = Image.open(source_path)
+        
+        # 1. [세로 스트립형] 3x1, 4x1 -> 2장 복사 (Double Strip)
         if mode in ['3x1', '4x1']:
+            # 2x6 인치 (600x1800 px)로 리사이즈
             strip_img = img.resize((600, 1800), Image.Resampling.LANCZOS)
+            # 4x6 인치 캔버스 (1200x1800 px)
             canvas = Image.new('RGB', (1200, 1800), 'white')
+            # 좌우 배치
             canvas.paste(strip_img, (0, 0))
             canvas.paste(strip_img, (600, 0))
             canvas.save(save_path, quality=95)
+
+        # 2. [추가됨] 2x1 (2컷) -> 821x1260 px (중앙 정렬)
+        elif mode == '2x1':
+            # 요청하신 사이즈로 정확히 리사이즈
+            target_w, target_h = 821, 1260
+            full_img = img.resize((target_w, target_h), Image.Resampling.LANCZOS)
+            
+            # 4x6 캔버스 (1200x1800) 생성 (흰색 배경)
+            canvas = Image.new('RGB', (1200, 1800), 'white')
+            
+            # 정중앙 좌표 계산
+            x_offset = (1200 - target_w) // 2
+            y_offset = (1800 - target_h) // 2
+            
+            # 중앙에 붙여넣기
+            canvas.paste(full_img, (x_offset, y_offset))
+            canvas.save(save_path, quality=95)
+
+        # 3. 그 외 (1x1, 2x2 등) -> 4x6 꽉 차게
         else:
             if img.width > img.height: canvas_size = (1800, 1200)
             else: canvas_size = (1200, 1800)
             full_img = img.resize(canvas_size, Image.Resampling.LANCZOS)
             full_img.save(save_path, quality=95)
-    except: shutil.copy2(source_path, save_path)
+            
+    except Exception as e:
+        print(f"Print Layout Error: {e}")
+        shutil.copy2(source_path, save_path)
 
 # -----------------------
 # Views
@@ -143,12 +170,19 @@ def select_shot(request):
 
 @ensure_csrf_cookie
 def select_theme(request):
-    try: count = int(request.GET.get('count', '3'))
-    except: count = 3
-    if count not in (3, 4): count = 3
-    mode = '3x1' if count == 3 else '4x1'
+    # [수정] 2컷(count=2) 허용
+    try: count = int(request.GET.get('count', '4'))
+    except: count = 4
+    
+    if count not in (2, 3, 4): count = 4
 
     request.session['shot_count'] = count
+    
+    # 모드 결정 로직
+    if count == 2: mode = '2x1'
+    elif count == 3: mode = '3x1'
+    else: mode = '4x1'
+        
     request.session['mode'] = mode
     
     _clear_session_data(request)
@@ -176,7 +210,7 @@ def select_theme(request):
 @ensure_csrf_cookie
 @never_cache
 def camera(request):
-    mode = request.session.get('mode', '3x1')
+    mode = request.session.get('mode', '4x1')
     theme = request.GET.get('theme') or request.session.get('theme')
     if not theme: return redirect('select_theme')
     request.session['theme'] = theme
@@ -192,7 +226,7 @@ def camera(request):
     settings_data = _load_global_settings()
 
     return render(request, 'camera.html', {
-        'count': request.session.get('shot_count', 3),
+        'count': request.session.get('shot_count', 4),
         'mode': mode, 'theme': theme,
         'guide_ratio': guide_ratio,
         'capture_delay_ms': _get_capture_delay(meta),
@@ -238,11 +272,25 @@ def preview(request):
     mode = request.session.get('mode')
     theme = request.session.get('theme')
     meta = _load_meta(mode, theme)
+    
+    # 1. 기본 프레임 (배경)
+    frame_url = f"/static/frames/{mode}/{theme}/frame.png"
+    
+    # 2. 레이아웃 (덮개) - hamzzi 테마 구조 참조
+    # 실제 파일이 있는지 확인 후 URL 생성
+    frames_root = _get_frames_root()
+    layout_path = frames_root / mode / theme / 'layout' / 'layout.png'
+    
+    layout_url = ""
+    if layout_path.exists():
+        layout_url = f"/static/frames/{mode}/{theme}/layout/layout.png"
+
     return render(request, 'preview.html', {
-        'mode':mode, 'theme':theme,
+        'mode': mode, 
+        'theme': theme,
         'captured_json': json.dumps(request.session.get('captured_urls', [])),
-        'frame_url': f"/static/frames/{mode}/{theme}/frame.png",
-        'layout_url': f"/static/frames/{mode}/{theme}/layout/layout.png",
+        'frame_url': frame_url,   # 배경
+        'layout_url': layout_url, # 맨 위 덮개 (있으면)
         'meta_json': json.dumps(meta)
     })
 
@@ -271,12 +319,11 @@ def decorate(request):
         frame_p = _get_frames_root() / mode / theme / 'frame.png'
         imgs = []
         for u in mapping:
-            # [핵심 수정] u가 None일 때 에러 방지
             if u:
                 clean = u.replace('/media/', '').lstrip('/')
                 imgs.append(str(settings.BASE_DIR / clean))
             else:
-                imgs.append(None) # 빈 슬롯 처리
+                imgs.append(None)
             
         from utils.combine_photo_v2 import combine_with_frame
         combine_with_frame(str(frame_p), {**meta, 'stickers':[]}, imgs, str(out_dir/fname), [], None)
@@ -312,10 +359,8 @@ def finalize(request):
         # 1. 이미지 합성
         out_img = img_dir / f"{base_name}.jpg"
         frame_p = _get_frames_root() / mode / theme / 'frame.png'
-        
         imgs = []
         for u in mapping:
-            # [핵심 수정] u가 None일 때 에러 방지
             if u:
                 clean = u.replace('/media/', '').lstrip('/')
                 imgs.append(str(settings.BASE_DIR / clean))
@@ -327,11 +372,11 @@ def finalize(request):
         from utils.combine_photo_v2 import combine_with_frame
         combine_with_frame(str(frame_p), meta, imgs, str(out_img), stickers, str(s_dir))
         
-        # 2. 인쇄용 이미지
+        # 2. 인쇄용 이미지 생성 (2x1 포함)
         print_img_path = img_dir / f"{base_name}_print.jpg"
         create_print_layout(str(out_img), str(print_img_path), mode)
         
-        # 3. 동영상 백업 (선택된 것만)
+        # 3. 동영상 백업
         captures = request.session.get('captured_urls', [])
         c_vids = request.session.get('captured_videos', [])
         
@@ -422,13 +467,11 @@ def printing(request):
     
     mapped_vids = []
     for m in mapping:
-        # [핵심 수정] m이 None(빈 슬롯)일 경우 처리
         if m and m in captures:
             idx = captures.index(m)
             if idx >= 0 and idx < len(c_vids): mapped_vids.append(c_vids[idx])
             else: mapped_vids.append(None)
-        else:
-            mapped_vids.append(None)
+        else: mapped_vids.append(None)
     
     layout_url = f"/static/frames/{mode}/{theme}/layout/layout.png"
     frame_url = f"/static/frames/{mode}/{theme}/frame.png"
@@ -450,6 +493,7 @@ def print_action(request):
         sett = _load_global_settings()
         if not sett.get('printer_enabled', True):
             return JsonResponse({'status':'skipped'})
+        
         path = request.session.get('print_output_path')
         if not path or not os.path.exists(path):
             path = request.session.get('last_output_path')

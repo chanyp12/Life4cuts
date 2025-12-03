@@ -6,61 +6,32 @@
         display: flex; flex-direction: column; align-items: center; justify-content: center;
         height: 100vh; background: #111; color: #fff;
     }
-    /* 테마 선택 페이지와 스타일 통일 */
-    .header-area {
-        text-align: center; margin-bottom: 40px;
-    }
-    .header-area h1 {
-        font-size: 36px; margin-bottom: 10px; letter-spacing: -1px;
-    }
-    .header-area p {
-        font-size: 16px; color: #888;
-    }
+    .header-area { text-align: center; margin-bottom: 40px; }
+    .header-area h1 { font-size: 36px; margin-bottom: 10px; letter-spacing: -1px; }
+    .header-area p { font-size: 16px; color: #888; }
 
-    .options-wrap {
-        display: flex; gap: 30px;
-    }
+    .options-wrap { display: flex; gap: 20px; }
     .option-card {
-        width: 300px; height: 500px; /* 높이 고정 */
+        width: 260px; height: 450px;
         background: #222; border-radius: 15px;
         display: flex; flex-direction: column;
-        align-items: center; justify-content: flex-start; /* 상단 정렬 */
-        cursor: pointer; transition: 0.3s;
-        border: 2px solid transparent;
-        overflow: hidden;
-        padding: 20px; /* 내부 여백 */
-        box-sizing: border-box;
+        align-items: center; justify-content: flex-start;
+        cursor: pointer; transition: 0.3s; border: 2px solid transparent;
+        padding: 20px; box-sizing: border-box;
     }
     .option-card:hover {
         border-color: #00d1b2; transform: translateY(-5px);
         box-shadow: 0 10px 20px rgba(0, 209, 178, 0.2);
     }
-    
-    /* 이미지 영역 */
     .thumb-box {
-        width: 100%;
-        flex: 1; /* 남은 공간 채우기 */
-        display: flex; align-items: center; justify-content: center;
-        margin-bottom: 20px;
-        overflow: hidden;
-        border-radius: 10px;
-        background: #000; /* 이미지 없을 때 배경 */
+        width: 100%; flex: 1; display: flex; align-items: center; justify-content: center;
+        margin-bottom: 20px; overflow: hidden; border-radius: 10px; background: #000;
     }
-    .thumb-box img {
-        max-width: 100%; max-height: 100%;
-        object-fit: contain; /* 비율 유지하며 맞춤 */
-    }
+    .thumb-box img { max-width: 100%; max-height: 100%; object-fit: contain; }
 
-    /* 텍스트 영역 */
-    .card-info {
-        text-align: center;
-    }
-    .card-info h2 {
-        font-size: 24px; margin: 0 0 5px 0; color: #fff;
-    }
-    .card-info p {
-        font-size: 14px; color: #aaa; margin: 0;
-    }
+    .card-info { text-align: center; }
+    .card-info h2 { font-size: 24px; margin: 0 0 5px 0; color: #fff; }
+    .card-info p { font-size: 14px; color: #aaa; margin: 0; }
 </style>
 
 <div class="select-container">
@@ -70,9 +41,19 @@
     </div>
 
     <div class="options-wrap">
+        <div class="option-card" onclick="location.href='{% url 'select_theme' %}?count=2'">
+            <div class="thumb-box">
+                <img src="{% static 'example/2cut_sample.png' %}" alt="2컷 샘플">
+            </div>
+            <div class="card-info">
+                <h2>2컷</h2>
+                <p>큰 사진 2장</p>
+            </div>
+        </div>
+
         <div class="option-card" onclick="location.href='{% url 'select_theme' %}?count=3'">
             <div class="thumb-box">
-                <img src="{% static 'example/3cut_sample.png' %}" alt="3컷 샘플">
+                <img src="{% static 'example/3cut_sample.png' %}" alt="3컷">
             </div>
             <div class="card-info">
                 <h2>3컷</h2>
@@ -82,11 +63,11 @@
         
         <div class="option-card" onclick="location.href='{% url 'select_theme' %}?count=4'">
             <div class="thumb-box">
-                <img src="{% static 'example/4cut_sample.png' %}" alt="4컷 샘플">
+                <img src="{% static 'example/4cut_sample.png' %}" alt="4컷">
             </div>
             <div class="card-info">
                 <h2>4컷</h2>
-                <p>클래식 네 컷 레이아웃</p>
+                <p>클래식 네 컷</p>
             </div>
         </div>
     </div>

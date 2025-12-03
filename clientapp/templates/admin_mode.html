@@ -5,103 +5,70 @@
     body { background: #222; color: #fff; overflow: hidden; margin: 0; }
     .admin-container { display: flex; height: 100vh; }
     
-    /* === [보안] 잠금 화면 (팝업 스타일) === */
+    /* === [보안] 잠금 화면 === */
     #lock-screen {
         position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background: rgba(0, 0, 0, 0.85); /* 뒤가 살짝 비치는 어두운 배경 */
-        backdrop-filter: blur(8px);       /* 블러 효과 */
-        z-index: 9999;
-        display: flex; flex-direction: column;
-        align-items: center; justify-content: center;
-        /* 초기에는 보임 (스크립트로 제어) */
+        background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(8px);
+        z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center;
     }
-    
     .numpad-container {
         background: #333; padding: 30px; border-radius: 20px;
-        box-shadow: 0 10px 40px rgba(0,0,0,0.8);
-        text-align: center; width: 320px; border: 1px solid #555;
+        box-shadow: 0 10px 50px rgba(0,0,0,0.8); text-align: center; width: 320px; border: 2px solid #555;
     }
-    
     .numpad-display {
-        width: 100%; height: 60px; margin-bottom: 20px;
-        font-size: 32px; text-align: center; letter-spacing: 8px;
-        background: #222; color: #00d1b2;
+        width: 100%; height: 60px; margin-bottom: 20px; font-size: 32px;
+        text-align: center; letter-spacing: 8px; background: #222; color: #00d1b2;
         border: 2px solid #444; border-radius: 10px; font-weight: bold;
     }
-    
-    .numpad-grid {
-        display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
-    }
-    
+    .numpad-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
     .num-btn {
-        padding: 20px; font-size: 22px; font-weight: bold;
-        background: #444; border: none; border-radius: 12px; color: #fff;
-        cursor: pointer; transition: 0.1s; box-shadow: 0 4px 0 #222;
+        padding: 20px; font-size: 22px; font-weight: bold; background: #444; border: none;
+        border-radius: 12px; color: #fff; cursor: pointer; transition: 0.1s; box-shadow: 0 4px 0 #222;
     }
     .num-btn:active { transform: translateY(4px); box-shadow: none; }
     .btn-clear { background: #c0392b; }
     .btn-enter { background: #27ae60; }
 
-    /* === 관리자 화면 UI === */
-    /* 왼쪽: 미리보기 영역 */
+    /* === 관리자 UI === */
     .preview-area {
-        flex: 3; background: #111;
-        display: flex; flex-direction: column;
-        align-items: center; justify-content: center;
-        position: relative;
+        flex: 3; background: #111; display: flex; flex-direction: column;
+        align-items: center; justify-content: center; position: relative; user-select: none;
     }
     
     #canvas-wrap {
-        position: relative;
-        box-shadow: 0 0 30px rgba(0,0,0,0.5);
-        background-color: #333;
+        position: relative; box-shadow: 0 0 30px rgba(0,0,0,0.5); background-color: #333;
     }
     
-    /* 슬롯 박스 (사진 위치 표시) */
+    /* 드래그 가능한 슬롯 박스 */
     .slot-box {
         position: absolute;
-        border: 2px solid #00ff00; /* 잘 보이게 연두색 */
-        background: rgba(0, 255, 0, 0.3);
-        z-index: 100; /* 프레임보다 위에 */
-        color: #fff; font-weight: bold; font-size: 24px;
+        border: 2px solid #00ff00; background: rgba(0, 255, 0, 0.3);
+        z-index: 100; color: #fff; font-weight: bold; font-size: 24px;
         display: flex; align-items: center; justify-content: center;
-        text-shadow: 0 0 5px #000;
-        cursor: grab;
+        text-shadow: 0 0 5px #000; cursor: grab;
     }
+    .slot-box:active { cursor: grabbing; border-color: #fff; }
     
-    /* 프레임 이미지 */
-    .frame-img {
-        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-        z-index: 10; pointer-events: none;
-    }
+    .frame-img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; }
 
-    /* 오른쪽: 설정 패널 */
     .control-panel {
-        flex: 1; min-width: 380px;
-        background: #333; padding: 20px; overflow-y: auto;
+        flex: 1; min-width: 380px; background: #333; padding: 20px; overflow-y: auto;
         box-shadow: -5px 0 10px rgba(0,0,0,0.3);
     }
-
-    .control-group {
-        background: #444; padding: 15px; border-radius: 8px; margin-bottom: 20px;
-    }
+    .control-group { background: #444; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
     .control-group h3 { margin-top: 0; border-bottom: 1px solid #555; padding-bottom: 10px; font-size: 18px; color: #eee; }
 
     label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 14px; color: #ccc; }
     input[type="number"], input[type="text"], select {
-        width: 100%; padding: 8px; margin-bottom: 10px;
-        background: #555; border: 1px solid #666; color: white; border-radius: 4px; box-sizing: border-box;
+        width: 100%; padding: 8px; margin-bottom: 10px; background: #555; border: 1px solid #666;
+        color: white; border-radius: 4px; box-sizing: border-box;
     }
-    
-    button {
-        width: 100%; padding: 12px; cursor: pointer;
-        border: none; border-radius: 5px; font-weight: bold; transition: 0.2s; font-size: 16px;
-    }
+    button { width: 100%; padding: 12px; cursor: pointer; border: none; border-radius: 5px; font-weight: bold; transition: 0.2s; font-size: 16px; }
     .btn-save { background: #00d1b2; color: white; }
     .btn-blue { background: #3273dc; color: white; margin-top: 10px; }
     .btn-home { background: #666; color: white; margin-bottom: 20px; }
+    .btn-init { background: #e67e22; color: white; margin-bottom: 10px; }
 
-    /* [요청반영] 좌표 설정 UI (한 줄 정렬) */
     .slot-row {
         display: flex; align-items: center; justify-content: space-between;
         background: #333; padding: 10px; border-radius: 5px; margin-bottom: 10px;
@@ -117,7 +84,6 @@
     <div class="numpad-container">
         <h3 style="margin-top:0; color:#00d1b2;">관리자 접근</h3>
         <input type="password" id="numpad-display" class="numpad-display" readonly placeholder="----">
-        
         <div class="numpad-grid">
             <button class="num-btn" onclick="addNum('1')">1</button>
             <button class="num-btn" onclick="addNum('2')">2</button>
@@ -132,24 +98,21 @@
             <button class="num-btn" onclick="addNum('0')">0</button>
             <button class="num-btn btn-enter" onclick="checkAuth()">OK</button>
         </div>
-        
-        <button onclick="exitAdmin()" style="margin-top:20px; background:transparent; border:1px solid #777; color:#ccc; padding:10px;">
-            나가기 (메인으로)
-        </button>
+        <button onclick="exitAdmin()" style="margin-top:20px; background:transparent; border:1px solid #777; color:#ccc; padding:10px;">나가기</button>
     </div>
 </div>
 
 <div class="admin-container">
-    <div class="preview-area">
+    <div class="preview-area" id="previewArea">
         <div id="canvas-wrap">
             <div id="slots-layer"></div>
-            <img src="{{ frame_url }}" class="frame-img" onerror="alert('프레임 이미지가 없거나 로드 실패! ' + this.src)">
+            <img src="{{ frame_url }}" class="frame-img" onerror="alert('프레임 이미지가 없습니다.\\nstatic/frames 폴더를 확인하세요.')">
         </div>
+        <p style="margin-top:10px; color:#888;">마우스로 초록색 박스를 드래그하여 위치를 조정하세요.</p>
     </div>
 
     <div class="control-panel">
         <h2>⚙️ 관리자 모드</h2>
-        
         <button class="btn-home" onclick="exitAdmin()">🏠 메인 화면으로 (로그아웃)</button>
 
         <div class="control-group">
@@ -157,22 +120,22 @@
             <form method="get">
                 <label>모드 (Mode)</label>
                 <select name="mode" onchange="this.form.submit()">
-                    {% for m in modes %}
-                    <option value="{{ m }}" {% if mode == m %}selected{% endif %}>{{ m }}</option>
-                    {% endfor %}
+                    {% for m in modes %}<option value="{{ m }}" {% if mode == m %}selected{% endif %}>{{ m }}</option>{% endfor %}
                 </select>
-                
                 <label>테마 (Theme)</label>
                 <select name="theme" onchange="this.form.submit()">
-                    {% for t in themes %}
-                    <option value="{{ t }}" {% if theme == t %}selected{% endif %}>{{ t }}</option>
-                    {% endfor %}
+                    {% for t in themes %}<option value="{{ t }}" {% if theme == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
                 </select>
             </form>
         </div>
 
         <div class="control-group">
             <h3>📸 좌표 설정</h3>
+            <div id="init-area" style="display:none; text-align:center; margin-bottom:10px;">
+                <p style="color:#ff6b6b; font-size:14px;">설정된 슬롯이 없습니다.</p>
+                <button class="btn-init" onclick="initSlots()">기본 슬롯 생성하기</button>
+            </div>
+
             <div id="slot-controls"></div>
             
             <label style="margin-top:15px; color:#00d1b2;">촬영 간격 (초)</label>
@@ -183,27 +146,19 @@
 
         <div class="control-group" style="border: 1px solid #00d1b2;">
             <h3 style="color:#00d1b2;">🖨️ 글로벌 설정</h3>
-            
             <div style="display:flex; align-items:center; margin-bottom:10px;">
-                <input type="checkbox" id="printerToggle" style="width:20px; height:20px;" 
-                       {% if global_settings.printer_enabled %}checked{% endif %}>
+                <input type="checkbox" id="printerToggle" style="width:20px;" {% if global_settings.printer_enabled %}checked{% endif %}>
                 <label style="margin-left:10px; cursor:pointer;" for="printerToggle">프린터 사용</label>
             </div>
-            
             <div style="display:flex; align-items:center; margin-bottom:15px;">
-                <input type="checkbox" id="mirrorToggle" style="width:20px; height:20px;" 
-                       {% if global_settings.mirror_mode %}checked{% endif %}>
-                <label style="margin-left:10px; cursor:pointer;" for="mirrorToggle">거울 모드</label>
+                <input type="checkbox" id="mirrorToggle" style="width:20px;" {% if global_settings.mirror_mode %}checked{% endif %}>
+                <label style="margin-left:10px; cursor:pointer;" for="mirrorToggle">좌우 반전</label>
             </div>
-            
             <label>인쇄 화면 유지 시간 (초)</label>
             <input type="number" id="printDuration" value="{{ global_settings.print_duration_sec }}">
-            
             <hr style="border-color:#555; margin:15px 0;">
-            
             <label style="color:#ff6b6b;">관리자 비밀번호 변경</label>
             <input type="text" id="newAdminPass" value="{{ global_settings.admin_password }}" placeholder="새 비밀번호 입력">
-
             <button class="btn-blue" onclick="saveGlobalSettings()">글로벌 설정 저장</button>
         </div>
     </div>
@@ -212,10 +167,9 @@
 <script>
 // --- 데이터 로드 ---
 const meta = {{ meta_json|safe }};
-const initialSlots = meta.slots || [];
 const captureDelayMs = {{ capture_delay_ms|default:5000 }};
 const serverPassword = "{{ global_settings.admin_password|default:'1234' }}";
-const MASTER_KEY = "0606"; // [요청반영] 마스터키
+const MASTER_KEY = "0606";
 
 const canvasW = meta.canvas.width || 1000;
 const canvasH = meta.canvas.height || 1500;
@@ -226,63 +180,69 @@ const viewW = canvasW * scale;
 const wrap = document.getElementById('canvas-wrap');
 const slotsLayer = document.getElementById('slots-layer');
 const controlsDiv = document.getElementById('slot-controls');
+const initArea = document.getElementById('init-area');
 
-// --- [보안] 넘버패드 & 인증 로직 ---
+// --- 보안 로직 ---
 const display = document.getElementById('numpad-display');
 let currentInput = "";
-
-function addNum(num) {
-    if(currentInput.length < 10) {
-        currentInput += num;
-        display.value = "*".repeat(currentInput.length);
-    }
-}
-function clearNum() {
-    currentInput = "";
-    display.value = "";
-}
+function addNum(num) { if(currentInput.length < 10) { currentInput += num; display.value = "*".repeat(currentInput.length); } }
+function clearNum() { currentInput = ""; display.value = ""; }
 function checkAuth() {
-    // 저장된 비밀번호 또는 마스터키 확인
     if (currentInput === serverPassword || currentInput === MASTER_KEY) {
         document.getElementById('lock-screen').style.display = 'none';
-        sessionStorage.setItem('admin_unlocked', 'true'); // 세션에 인증 상태 저장
-    } else {
-        alert('비밀번호가 틀렸습니다.');
-        clearNum();
-    }
+        sessionStorage.setItem('admin_unlocked', 'true');
+    } else { alert('비밀번호가 틀렸습니다.'); clearNum(); }
 }
-
-// [핵심] 관리자 모드 나가기 (로그아웃)
 function exitAdmin() {
-    sessionStorage.removeItem('admin_unlocked'); // 인증 정보 삭제 (다음 진입 시 비번 물어봄)
+    sessionStorage.removeItem('admin_unlocked');
     window.location.href = "{% url 'startpage' %}";
 }
-
-// 페이지 로드 시 인증 여부 체크
 window.onload = function() {
-    // 세션에 인증 기록이 없으면 잠금 화면 표시
-    if (sessionStorage.getItem('admin_unlocked') !== 'true') {
-        document.getElementById('lock-screen').style.display = 'flex';
-    } else {
-        document.getElementById('lock-screen').style.display = 'none';
-    }
+    if (sessionStorage.getItem('admin_unlocked') !== 'true') document.getElementById('lock-screen').style.display = 'flex';
+    else document.getElementById('lock-screen').style.display = 'none';
+    
     renderSlots();
 };
 
-// --- [UI] 초기화 ---
+// --- UI 초기화 ---
 wrap.style.width = viewW + 'px';
 wrap.style.height = viewH + 'px';
 document.getElementById('captureDelaySec').value = captureDelayMs / 1000;
 
-let currentSlots = JSON.parse(JSON.stringify(initialSlots));
+let currentSlots = meta.slots ? JSON.parse(JSON.stringify(meta.slots)) : [];
 
-// [요청반영] 좌표 설정 UI (한 줄 표기)
+// [기능 추가] 슬롯 초기화 (없을 때)
+function initSlots() {
+    const mode = "{{ mode }}";
+    let count = 4;
+    if(mode === '2x1') count = 2;
+    else if(mode === '3x1') count = 3;
+
+    currentSlots = [];
+    for(let i=0; i<count; i++){
+        currentSlots.push({x: 50, y: 50 + (i*200), w: 300, h: 200});
+    }
+    renderSlots();
+}
+
+// [기능 추가] 드래그 로직 변수
+let isDragging = false;
+let dragIdx = -1;
+let startX, startY, initialX, initialY;
+
 function renderSlots() {
     slotsLayer.innerHTML = '';
     controlsDiv.innerHTML = '';
 
+    if (currentSlots.length === 0) {
+        initArea.style.display = 'block';
+        return;
+    } else {
+        initArea.style.display = 'none';
+    }
+
     currentSlots.forEach((slot, idx) => {
-        // 박스 그리기
+        // 1. 박스 생성
         const div = document.createElement('div');
         div.className = 'slot-box';
         div.innerText = idx + 1;
@@ -290,9 +250,13 @@ function renderSlots() {
         div.style.top = (slot.y * scale) + 'px';
         div.style.width = (slot.w * scale) + 'px';
         div.style.height = (slot.h * scale) + 'px';
+        
+        // [핵심] 드래그 이벤트 연결
+        div.onmousedown = (e) => startDrag(e, idx);
+        
         slotsLayer.appendChild(div);
 
-        // 입력창 그리기 (가로형)
+        // 2. 입력창 생성
         const row = document.createElement('div');
         row.className = 'slot-row';
         row.innerHTML = `
@@ -302,10 +266,43 @@ function renderSlots() {
                 <div class="coord-item"><span>Y</span><input type="number" value="${slot.y}" onchange="updateSlot(${idx},'y',this.value)"></div>
                 <div class="coord-item"><span>W</span><input type="number" value="${slot.w}" onchange="updateSlot(${idx},'w',this.value)"></div>
                 <div class="coord-item"><span>H</span><input type="number" value="${slot.h}" onchange="updateSlot(${idx},'h',this.value)"></div>
-            </div>
-        `;
+            </div>`;
         controlsDiv.appendChild(row);
     });
+}
+
+// --- 드래그 핸들러 구현 ---
+function startDrag(e, idx) {
+    isDragging = true;
+    dragIdx = idx;
+    startX = e.clientX;
+    startY = e.clientY;
+    initialX = currentSlots[idx].x * scale;
+    initialY = currentSlots[idx].y * scale;
+    document.addEventListener('mousemove', onDrag);
+    document.addEventListener('mouseup', stopDrag);
+}
+
+function onDrag(e) {
+    if (!isDragging) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    
+    // 화면상 좌표 -> 실제 좌표 변환
+    let newX = (initialX + dx) / scale;
+    let newY = (initialY + dy) / scale;
+    
+    currentSlots[dragIdx].x = Math.round(newX);
+    currentSlots[dragIdx].y = Math.round(newY);
+    
+    renderSlots(); // 실시간 갱신
+}
+
+function stopDrag() {
+    isDragging = false;
+    dragIdx = -1;
+    document.removeEventListener('mousemove', onDrag);
+    document.removeEventListener('mouseup', stopDrag);
 }
 
 function updateSlot(idx, key, val) {
@@ -316,33 +313,21 @@ function updateSlot(idx, key, val) {
 function saveSlots() {
     const sec = document.getElementById('captureDelaySec').value;
     const ms = sec * 1000;
-
     fetch("{% url 'admin_save_slots' %}", {
-        method: 'POST',
-        headers: {'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            'mode': '{{ mode }}', 'theme': '{{ theme }}',
-            'slots': currentSlots,
-            'capture_delay_ms': ms
-        })
+        method: 'POST', headers: {'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/json'},
+        body: JSON.stringify({mode: '{{ mode }}', theme: '{{ theme }}', slots: currentSlots, capture_delay_ms: ms})
     }).then(r=>r.json()).then(d=>alert(d.saved?'✅ 설정 저장 완료':'❌ 저장 실패'));
 }
 
 function saveGlobalSettings() {
-    const printerEnabled = document.getElementById('printerToggle').checked;
-    const mirrorMode = document.getElementById('mirrorToggle').checked;
-    const duration = document.getElementById('printDuration').value;
-    const newPass = document.getElementById('newAdminPass').value;
-
     fetch("{% url 'admin_save_slots' %}", {
-        method: 'POST',
-        headers: {'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/json'},
+        method: 'POST', headers: {'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/json'},
         body: JSON.stringify({
-            'action': 'save_global_settings',
-            'printer_enabled': printerEnabled,
-            'mirror_mode': mirrorMode,
-            'print_duration_sec': duration,
-            'admin_password': newPass
+            action: 'save_global_settings',
+            printer_enabled: document.getElementById('printerToggle').checked,
+            mirror_mode: document.getElementById('mirrorToggle').checked,
+            print_duration_sec: document.getElementById('printDuration').value,
+            admin_password: document.getElementById('newAdminPass').value
         })
     }).then(r=>r.json()).then(d=>alert(d.saved?'✅ 글로벌 설정 저장 완료':'❌ 저장 실패'));
 }
